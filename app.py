@@ -1780,6 +1780,9 @@ if _sec == "数据与口径":
     with st.expander("导出汇报 PPT（含图表与解读）", expanded=False):
         st.caption("按公司汇报格式生成：封面 / 执行摘要 / 核心指标 / 趋势 / 品类结构 / 毛利率 / "
                    "Top 商品 / 改善建议 / 附录口径，每张图配解读。图表为图片，可直接投屏。")
+        if PE is not None:
+            st.caption(f"图表中文字体：{getattr(PE, '_FONT', '未知')}"
+                       + ("（未找到中文字体，图表里的中文会变成方框）" if getattr(PE, "_FONT", "") == "DejaVu Sans" else ""))
         if st.button("生成 PPT", key="mk_ppt"):
             with st.spinner("正在生成 PPT…"):
                 try:

@@ -22,6 +22,9 @@
 3. 选仓库，Main file path 填 `app.py`，Deploy
 4. 首次构建约 3–5 分钟，之后就有公开地址 `https://<app名>.streamlit.app`
 
+仓库里的 `packages.txt` 会让云端装 `fonts-noto-cjk`——**必需**，否则 PPT 里 matplotlib 画的中文会变成方框。
+部署页会显示当前图表字体，正常应显示 `Noto Sans CJK SC`。
+
 不需要任何密钥。想加访问密码，在 Advanced settings → Secrets 里写：
 
 ```toml

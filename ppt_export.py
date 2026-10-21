@@ -56,7 +56,28 @@ def _fmt(v, unit="元"):
 
 
 # ---------------- 图表（matplotlib → PNG） ----------------
-plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+# 中文字体：云端(Linux)没有 YaHei，要靠 packages.txt 装的 Noto；按可用性依次挑
+_CJK_CANDIDATES = [
+    "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans SC",
+    "Source Han Sans SC", "WenQuanYi Zen Hei", "WenQuanYi Micro Hei",
+    "SimHei", "PingFang SC", "Arial Unicode MS", "DejaVu Sans",
+]
+
+
+def pick_cjk_font(candidates=None):
+    """返回本机可用的第一个中文字体；都没有就退回 DejaVu Sans（会显示成方框）。"""
+    from matplotlib import font_manager
+    have = {f.name for f in font_manager.fontManager.ttflist}
+    for name in (candidates or _CJK_CANDIDATES):
+        if name in have:
+            return name
+    return "DejaVu Sans"
+
+
+_FONT = pick_cjk_font()
+if _FONT != "DejaVu Sans":
+    FONT = _FONT          # PPT 正文也用实际存在的字体，避免云端字体名对不上
+plt.rcParams["font.sans-serif"] = [_FONT, "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 
