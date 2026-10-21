@@ -8,6 +8,7 @@
 import io
 import os
 import tempfile
+from pathlib import Path
 from datetime import datetime
 
 import matplotlib
@@ -56,8 +57,29 @@ def _fmt(v, unit="元"):
 
 
 # ---------------- 图表（matplotlib → PNG） ----------------
-# 中文字体：云端(Linux)没有 YaHei，要靠 packages.txt 装的 Noto；按可用性依次挑
-_CJK_CANDIDATES = [
+# 中文字体：优先用仓库里自带的字体（assets/fonts/），不依赖服务器装没装
+_ASSET_FONTS = Path(__file__).resolve().parent / "assets" / "fonts"
+
+
+def _register_bundled_fonts():
+    """把 assets/fonts 下的字体注册进 matplotlib，返回它们的字体名。"""
+    from matplotlib import font_manager
+    names = []
+    if _ASSET_FONTS.is_dir():
+        for f in sorted(_ASSET_FONTS.iterdir()):
+            if f.suffix.lower() not in (".otf", ".ttf", ".ttc"):
+                continue
+            try:
+                font_manager.fontManager.addfont(str(f))
+                names.append(font_manager.FontProperties(fname=str(f)).get_name())
+            except Exception:
+                pass
+    return names
+
+
+_BUNDLED_FONTS = _register_bundled_fonts()
+
+_CJK_CANDIDATES = _BUNDLED_FONTS + [
     "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans SC",
     "Source Han Sans SC", "WenQuanYi Zen Hei", "WenQuanYi Micro Hei",
     "SimHei", "PingFang SC", "Arial Unicode MS", "DejaVu Sans",
