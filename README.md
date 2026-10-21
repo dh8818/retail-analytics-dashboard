@@ -2,7 +2,7 @@
 
 上传 Excel / CSV，自动识别表结构、建表关系，出 Power BI 风格的多维经营分析，并能导出可直接汇报的 PPT。
 
-**在线体验**：部署后把地址填在这里（见下方「部署」）。
+**在线体验**：https://zjx-retai.streamlit.app/ （打开即用，无需登录、无需安装）
 
 ![界面](docs/preview.png)
 
