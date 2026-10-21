@@ -31,6 +31,9 @@ def run_sql(df, sql, limit=MAX_ROWS):
         return None, "检测到写操作关键字，这里只接受只读查询"
     con = duckdb.connect()
     try:
+        # 关键：禁用本地文件系统，防止 SELECT read_csv('任意路径') 读到服务器文件
+        # （这个设置必须在连接建立之后、查询之前执行）
+        con.execute("SET disabled_filesystems='LocalFileSystem'")
         con.register(TABLE, df)
         out = con.execute(q).fetchdf()
     except Exception as e:

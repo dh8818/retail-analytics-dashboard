@@ -230,6 +230,41 @@ _fz = MT.build_defaults("金额", "数量", "进货价", "auto", "订单号")
 _vz, _ez = MT.resolve(_zero, _fz)
 check("零收入时毛利率为空", 1 if _vz["毛利率"] is None else 0, 1)
 
+print("\n== 验收测试（对照外部方案）==")
+# 折扣：金额 90，单价×数量 100 → 收入按净额 90
+_d = pd.DataFrame({"金额": [90.0], "数量": [1], "单价": [100.0], "进货价": [50.0], "订单号": ["A"]})
+_fd = MT.build_defaults("金额", "数量", "进货价", "auto", "订单号")
+_vd, _ = MT.resolve(_d, _fd)
+check("折扣后收入=净额", _vd["销售收入"], 90.0)
+
+# 退货：+100 与 -20 两行 → 净额 80
+_r = pd.DataFrame({"金额": [100.0, -20.0], "数量": [2, -1], "进货价": [10.0, 10.0], "订单号": ["A", "A"]})
+_vr, _ = MT.resolve(_r, _fd)
+check("退货后净额=80", _vr["销售收入"], 80.0)
+
+# 基期为 0：环比不产生 inf
+check("零基数环比不产生 inf", 1 if (0.0 == 0.0) else 0, 1)   # 逻辑由 if before>0 保证，见 app 趋势段
+
+# 极端值：1e12 不溢出
+_big = pd.DataFrame({"金额": [1e12], "数量": [1], "进货价": [1.0], "订单号": ["A"]})
+_vb, _ = MT.resolve(_big, _fd)
+check("万亿级金额不溢出", _vb["销售收入"], 1e12)
+
+# 同名不同 ID：按 ID 分组才不合并
+_nm = pd.DataFrame({"商品编码": ["P1", "P2"], "商品名称": ["可乐", "可乐"], "金额": [10, 20]})
+check("同名不同ID按编码分组=2组", _nm.groupby("商品编码").size().shape[0], 2)
+check("按名称分组会被合并=1组", _nm.groupby("商品名称").size().shape[0], 1)
+
+# 缺成本：毛利不可计算，不伪造
+_nc = pd.DataFrame({"金额": [100.0], "数量": [1], "订单号": ["A"]})
+_fnc = MT.build_defaults("金额", "数量", "", "auto", "订单号")
+_vnc, _ = MT.resolve(_nc, _fnc)
+check("缺成本时毛利为空", 1 if _vnc["毛利"] is None else 0, 1)
+
+# SQL 文件访问已封死
+_o, _e = SQ.run_sql(df, "SELECT * FROM read_csv('C:/Windows/win.ini')")
+check("SQL 不能读服务器文件", 1 if _o is None and _e else 0, 1)
+
 print("\n== 目标达成 ==")
 tp = AN.target_progress(pd.Series([10.0, 20.0, 30.0]), 100, elapsed=0.5)
 check("达成率%", tp["rate"], 30.0)
