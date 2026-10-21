@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 
 import stats_models as SM
+import explain as EX
 from style import MUTED, TEXT, BI_NAVY, BI_BLUE, PALETTE, fmt
 
 
@@ -94,6 +95,13 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                     f"{'模型整体显著，可以看系数方向；' if np.isfinite(m['f_p']) and m['f_p'] < 0.05 else '模型整体不显著，这些变量解释力不够；'}"
                     f"系数为正表示该变量越大 Y 越大。注意：这是相关关系，不是因果关系。</div>",
                     unsafe_allow_html=True)
+                with st.expander("这说明了什么？（每个系数的人话解释）", expanded=True):
+                    for line in EX.coef_sentences(m, y_col):
+                        st.markdown(f"<div class='insight'>{line}</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='sect' style='margin-top:14px'>模型结论</div>",
+                                unsafe_allow_html=True)
+                    for line in EX.model_readout(m, y_col):
+                        st.caption("· " + line)
 
     # ---------- 4. 聚类 ----------
     _sect("K-Means 聚类", "不预设分类，让数据自己分组（客户/商品/门店都适用）")
@@ -124,6 +132,13 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                     agg["样本数"] = tmp.groupby("群").size()
                     st.dataframe(agg.reset_index(), width="stretch", hide_index=True)
                 st.caption(f"组内平方和 {km['inertia']:,.1f}；同一份数据每次结果一致（固定随机种子），可复现。")
+                if by == "（不分组）":
+                    prof = EX.cluster_profiles(tmp, feats)
+                else:
+                    prof = EX.cluster_profiles(tmp, feats)
+                st.markdown("<div class='sect' style='margin-top:12px'>每一群是什么"
+                            "<small>相对整体均值看，偏高还是偏低</small></div>", unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame(prof), width="stretch", hide_index=True)
 
     # ---------- 5. 指标拆解 ----------
     _sect("指标拆解", "收入为什么变？拆成「量」和「价」各自贡献了多少")

@@ -27,6 +27,8 @@ import custom_metrics as CM
 import metrics as MT
 import advice as ADV
 import sql_console as SQ
+import nlq
+import privacy_ui as PV
 import cleaning_ui as CU
 import cleaning as CL
 import advanced_ui as AU
@@ -755,6 +757,7 @@ st.markdown(
     f"<div style='font-size:12.5px;color:{MUTED}'>上传 Excel / CSV → 自动识别结构 → 多维分析</div></div>"
     f"<div style='height:2px;background:{BI_NAVY};width:44px;margin:8px 0 10px'></div>",
     unsafe_allow_html=True)
+PV.badge()
 
 with st.sidebar:
     st.markdown("#### 1. 上传数据")
@@ -1734,12 +1737,17 @@ if _sec == "客户与归因":
 
 # ---------------- 数据与口径 ----------------
 if _sec == "SQL 查询":
+    _nlq_schema = nlq.build_schema(df, metric=metric, qty=qty_c, date=dc,
+                                   cost=cost_c, cat=big, item=detail)
+    SQ.render_ask(df, _nlq_schema)
+    st.divider()
     SQ.render_sql(df)
 
 if _sec == "统计建模":
     AU.render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc)
 
 if _sec == "数据与口径":
+    PV.render()
     st.markdown("<div class='sect'>数据概况</div>", unsafe_allow_html=True)
     kcols = st.columns(len(items[:5]))
     for i, (lab, val, sub) in enumerate(items[:5]):

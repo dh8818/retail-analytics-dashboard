@@ -188,6 +188,23 @@ check("空列被删", 1 if "空列" not in _clean.columns else 0, 1)
 _clean2, _log2, _ = CL.clean(_clean, {"fill": "不处理"})
 check("再洗一次不再变化", len(_clean2.columns), len(_clean.columns))
 
+print("\n== 中文问数（NL→SQL）==")
+import nlq
+_sch = nlq.build_schema(df, metric="金额", qty="数量", date="日期")
+_r1 = nlq.to_sql("各品类销售额", _sch)
+check("基础问数能解析", 1 if _r1.get("ok") else 0, 1)
+check("生成的 SQL 含分组", 1 if "GROUP BY" in _r1.get("sql", "") else 0, 1)
+check("生成的 SQL 能跑通", 1 if SQ.run_sql(df, _r1["sql"])[1] is None else 0, 1)
+
+_r2 = nlq.to_sql("各品类销售额前 2 名", _sch)
+check("前 N 名带 LIMIT", 1 if "LIMIT 2" in _r2.get("sql", "") else 0, 1)
+
+_r3 = nlq.to_sql("各门店客单价", _sch)
+check("缺维度时明确报错", 1 if (not _r3.get("ok") and "门店" in _r3.get("reason", "")) else 0, 1)
+
+_r4 = nlq.to_sql("今天天气怎么样", _sch)
+check("听不懂时不瞎编", 1 if not _r4.get("ok") else 0, 1)
+
 print("\n== 目标达成 ==")
 tp = AN.target_progress(pd.Series([10.0, 20.0, 30.0]), 100, elapsed=0.5)
 check("达成率%", tp["rate"], 30.0)

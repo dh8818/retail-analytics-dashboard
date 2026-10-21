@@ -9,6 +9,8 @@ import duckdb
 import pandas as pd
 import streamlit as st
 
+import nlq
+
 from style import MUTED, TEXT, BI_NAVY
 
 TABLE = "t"
@@ -103,3 +105,77 @@ def render_sql(df):
                 pass
         st.download_button("下载结果 CSV", res.to_csv(index=False).encode("utf-8-sig"),
                            file_name="query_result.csv", mime="text/csv", key="sql_dl")
+
+
+def render_ask(df, schema):
+    """用一句话问数据：中文 → SQL → 结果 → 导出。"""
+    st.markdown("<div class='sect'>用一句话问数据<small>说人话，自动写 SQL 并出结果</small></div>",
+                unsafe_allow_html=True)
+    st.caption("比如：上个月各品类销售额 / 最近 30 天销量最高的商品 / 8 月饮料卖了多少 / 各品类毛利率")
+
+    examples = ["上个月各品类销售额", "最近 30 天销量最高的商品",
+                "8 月各品类销售额前 5", "各品类毛利率", "各月份收入"]
+    try:
+        picked = st.pills("示例", examples, key="ask_pills", label_visibility="collapsed")
+    except Exception:
+        picked = st.selectbox("示例", ["（自己输入）"] + examples, key="ask_sel",
+                              label_visibility="collapsed")
+
+    # 点了示例就把问题写进输入框（widget 已有 value 时会被忽略，必须写 session_state）
+    if isinstance(picked, str) and picked in examples and st.session_state.get("_ask_pill") != picked:
+        st.session_state["_ask_pill"] = picked
+        st.session_state["ask_q"] = picked
+        st.rerun()
+
+    c1, c2 = st.columns([4, 1])
+    q = c1.text_input("问题", key="ask_q", label_visibility="collapsed",
+                      placeholder="输入你的问题，例如：上个月各品类销售额前 5")
+    if c2.button("查询", key="ask_go", type="primary"):
+        parsed = nlq.to_sql(q, schema)
+        if not parsed.get("ok"):
+            st.session_state["ask_res"] = (parsed, None, None)
+        else:
+            out, err = run_sql(df, parsed["sql"])
+            st.session_state["ask_res"] = (parsed, out, err)
+
+    res = st.session_state.get("ask_res")
+    if not res:
+        return
+    parsed, out, err = res
+    if not parsed.get("ok"):
+        st.warning("没听懂这个问题：" + str(parsed.get("reason")))
+        st.caption("换个说法试试：带上「哪个维度（品类/商品/月份）」+「什么指标（销售额/数量/订单数/客单价/毛利率）」"
+                   "+「时间（上个月/近 30 天/8 月）」。")
+        return
+
+    st.markdown(f"<div class='insight'>我的理解：{parsed['explain']}</div>", unsafe_allow_html=True)
+    with st.expander("查看生成的 SQL", expanded=False):
+        st.code(parsed["sql"], language="sql")
+    if err:
+        st.error(f"执行出错：{err}")
+        return
+    if out is None or out.empty:
+        st.info("查询没有返回数据：可能是这个时间范围内没有记录，或筛选条件太严。")
+        return
+
+    st.markdown(f"<div style='font-size:12.5px;color:{MUTED}'>结果 {len(out):,} 行</div>",
+                unsafe_allow_html=True)
+    st.dataframe(out, width="stretch", hide_index=True)
+
+    nums = [c for c in out.columns if pd.api.types.is_numeric_dtype(out[c])]
+    if nums and len(out) <= 100:
+        try:
+            import plotly.express as px
+            x = next((c for c in out.columns if c not in nums), out.columns[0])
+            fig = px.bar(out.head(30), x=x, y=nums[0], color_discrete_sequence=["#1F3864"],
+                         text=nums[0])
+            fig.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
+            fig.update_layout(height=340, margin=dict(l=10, r=10, t=20, b=10),
+                              paper_bgcolor="#fff", plot_bgcolor="#fff",
+                              font=dict(family="Microsoft YaHei, sans-serif", size=12))
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        except Exception:
+            pass
+
+    st.download_button("下载结果 CSV", out.to_csv(index=False).encode("utf-8-sig"),
+                       file_name="问数结果.csv", mime="text/csv", key="ask_dl")

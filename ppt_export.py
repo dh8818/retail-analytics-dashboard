@@ -550,6 +550,11 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
     buf = io.BytesIO()
     prs.save(buf)
     buf.seek(0)
+    try:                     # 图表 PNG 只是中间产物，生成完就删，不在任何地方留副本
+        import shutil as _sh
+        _sh.rmtree(tmp, ignore_errors=True)
+    except Exception:
+        pass
     return buf.getvalue()
 
 
