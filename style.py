@@ -47,6 +47,15 @@ def fig_base(fig, height=330, title=None, legend=False):
     fig.update_xaxes(showgrid=False, zeroline=False, linecolor=GRID,
                      tickfont=dict(color=MUTED, size=11))
     fig.update_yaxes(gridcolor=GRID, zeroline=False, tickfont=dict(color=MUTED, size=11))
+
+    # 柱状图必须零基线：否则 12 和 15 看起来差 3 倍（视觉误导）
+    bars = [t for t in fig.data if getattr(t, "type", "") == "bar"]
+    if bars:
+        horizontal = [getattr(t, "orientation", None) for t in bars]
+        if all(o == "h" for o in horizontal):
+            fig.update_xaxes(rangemode="tozero")
+        else:
+            fig.update_yaxes(rangemode="tozero")
     if legend:
         fig.update_layout(legend=dict(orientation="h", y=1.09, x=1, xanchor="right",
                                       font=dict(size=11, color=MUTED)))

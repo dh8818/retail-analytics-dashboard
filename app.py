@@ -29,6 +29,7 @@ import advice as ADV
 import sql_console as SQ
 import nlq
 import perf
+import timefix
 import privacy_ui as PV
 import cleaning_ui as CU
 import cleaning as CL
@@ -241,7 +242,15 @@ def apply_join(fact, dim, fk, pk, dim_name, resolve="数值平均"):
     d = d.rename(columns=rename)
     pk2 = rename[pk]
     added = [rename[c] for c in dim.columns if c != pk and c not in fact.columns]
+    # 兜底：万一维表没去干净，merge 会扇出、金额成倍放大。这里强制一行对一行
+    fact = fact.reset_index(drop=True)
+    fact["__row__"] = range(len(fact))
     out = fact.merge(d, left_on=fk, right_on=pk2, how="left")
+    if len(out) != len(fact):
+        extra = len(out) - len(fact)
+        out = out.drop_duplicates(subset="__row__", keep="first")
+        dup = dup + extra
+    out = out.drop(columns=["__row__"])
     if pk2 in out.columns and fk != pk2:
         out = out.drop(columns=[pk2])
     return out, added, dup
@@ -704,8 +713,13 @@ def make_insights(df, kinds, metric, dc, cat, detail):
                 rec, before, lab = float(m.iloc[-1]), float(m.iloc[-2]), "最近 1 个月"
             if before > 0:
                 chg = (rec - before) / before * 100
+                _note = ""
+                # 基数过小时百分比会被放大，必须提示，否则 900% 这种数字会误导
+                if before < float(m.mean()) * 0.2 or before < 100:
+                    _note = "（基数偏小，百分比会被放大，建议同时看绝对值）"
                 out.append(f"**趋势**：{lab}比上一个周期"
-                           f"{'上升' if chg>0 else '下降'} {abs(chg):.1f}%（{fmt(rec)} vs {fmt(before)}）。")
+                           f"{'上升' if chg>0 else '下降'} {abs(chg):.1f}%"
+                           f"（{fmt(rec)} vs {fmt(before)}）{_note}。")
 
         q = s.copy()
         q["_q"] = "Q" + q[dc].dt.quarter.astype(str)
@@ -1309,6 +1323,7 @@ if _zoom:
 
 
 # ---------- 清洗层：清洗后的数据会被全站使用 ----------
+df, _tz_fixed = timefix.to_local_dates(df)      # 带时区的时间戳先换算成本地时间
 _RAW_DF = df.copy()
 _DF_SIG = f"{len(_RAW_DF)}x{len(_RAW_DF.columns)}:" + ",".join(map(str, _RAW_DF.columns))
 _clean_state = st.session_state.get("_clean")

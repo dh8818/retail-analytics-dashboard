@@ -205,6 +205,31 @@ check("缺维度时明确报错", 1 if (not _r3.get("ok") and "门店" in _r3.ge
 _r4 = nlq.to_sql("今天天气怎么样", _sch)
 check("听不懂时不瞎编", 1 if not _r4.get("ok") else 0, 1)
 
+print("\n== 审计回归项 ==")
+import timefix, style
+import plotly.graph_objects as go
+
+# 时区：20:00Z 应归到次日（北京时间）
+_tdf = pd.DataFrame({"t": ["2023-01-01T20:00:00Z"], "v": [1]})
+_fix, _cols = timefix.to_local_dates(_tdf)
+check("带时区列被识别", 1 if _cols else 0, 1)
+check("UTC 20:00 → 本地次日", 1 if str(_fix["t"].dt.date.iloc[0]) == "2023-01-02" else 0, 1)
+
+# 柱状图零基线
+_fb = go.Figure(go.Bar(x=["A", "B"], y=[12, 15]))
+style.fig_base(_fb, 300, "t")
+check("柱状图 y 轴从 0 起", 1 if _fb.layout.yaxis.rangemode == "tozero" else 0, 1)
+_fl = go.Figure(go.Scatter(x=[1, 2], y=[100, 101]))
+style.fig_base(_fl, 300, "t")
+check("折线图不强制零基线", 1 if _fl.layout.yaxis.rangemode is None else 0, 1)
+
+# 除零：收入为 0 时毛利率不应是 inf
+_zero = pd.DataFrame({"金额": [0.0, 0.0], "数量": [0, 0], "进货价": [1.0, 1.0],
+                      "订单号": ["A", "B"]})
+_fz = MT.build_defaults("金额", "数量", "进货价", "auto", "订单号")
+_vz, _ez = MT.resolve(_zero, _fz)
+check("零收入时毛利率为空", 1 if _vz["毛利率"] is None else 0, 1)
+
 print("\n== 目标达成 ==")
 tp = AN.target_progress(pd.Series([10.0, 20.0, 30.0]), 100, elapsed=0.5)
 check("达成率%", tp["rate"], 30.0)
