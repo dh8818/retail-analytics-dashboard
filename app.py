@@ -26,6 +26,8 @@ import extra_sections as XS
 import custom_metrics as CM
 import metrics as MT
 import advice as ADV
+import sql_console as SQ
+import advanced_ui as AU
 try:
     import ppt_export as PE
 except Exception:
@@ -1531,7 +1533,7 @@ if _lead:
     st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
 
 # 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
-_SECTIONS = ["概览", "趋势", "结构", "经营", "客户与归因", "数据与口径"]
+_SECTIONS = ["概览", "趋势", "结构", "经营", "客户与归因", "SQL 查询", "统计建模", "数据与口径"]
 try:
     _sec = st.segmented_control("模块", _SECTIONS, default=_SECTIONS[0],
                                 key="sec_pick", label_visibility="collapsed")
@@ -1566,6 +1568,30 @@ if _sec == "概览":
                 f"<div class='sumtext'><b>依据</b>：{_a['evidence']}<br>"
                 f"<b>怎么做</b>：{_a['action']}<br>"
                 f"<b>预期</b>：{_a['impact']}</div></div>", unsafe_allow_html=True)
+
+    # 汇报话术：把结论组织成能直接念的一段话
+    if metric:
+        _period, _mom_txt, _top_cat, _top_share = "本期", "", "", ""
+        if dc:
+            _dts = pd.to_datetime(df[dc], errors="coerce")
+            _gg = pd.to_numeric(df[metric], errors="coerce").groupby(_dts.dt.to_period("M")).sum()
+            _gg = _gg[_gg.index.notna()]
+            if len(_gg) >= 2 and _gg.iloc[-2]:
+                _period = str(_gg.index[-1])
+                _mom_txt = f"{(_gg.iloc[-1] - _gg.iloc[-2]) / _gg.iloc[-2] * 100:+.1f}%"
+        if big and big in df.columns:
+            _sc = df.groupby(big)[metric].sum().sort_values(ascending=False)
+            if len(_sc):
+                _top_cat = str(_sc.index[0])
+                _top_share = f"{_sc.iloc[0] / _sc.sum() * 100:.0f}%"
+        _facts = {"period": _period, "rev": fmt(_sales),
+                  "margin": f"{_margin:.1f}%" if _margin is not None else "",
+                  "mom": _mom_txt, "top_cat": _top_cat, "top_share": _top_share,
+                  "concern": (_adv[0]["title"] if _adv else ""),
+                  "advice": _adv[:3] if _adv else []}
+        with st.expander("汇报话术｜照着念就行", expanded=False):
+            st.code(ADV.speech_script(_facts), language="text")
+            st.caption("数字全部来自当前这份数据；口径改了，话术也跟着变。")
 
     if oc and metric:
         _o_tab, _om = AN.order_metrics(df, oc, metric, qty_c, dc, _order_key, _tie, _include_refunds)
@@ -1689,6 +1715,12 @@ if _sec == "客户与归因":
         XS.section_compare(df, dc, metric, cat_cols, chart_card)
 
 # ---------------- 数据与口径 ----------------
+if _sec == "SQL 查询":
+    SQ.render_sql(df)
+
+if _sec == "统计建模":
+    AU.render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc)
+
 if _sec == "数据与口径":
     st.markdown("<div class='sect'>数据概况</div>", unsafe_allow_html=True)
     kcols = st.columns(len(items[:5]))

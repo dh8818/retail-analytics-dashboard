@@ -128,6 +128,41 @@ try:
 except ImportError:
     print("· 跳过（未装 python-pptx / matplotlib）")
 
+print("\n== 统计与建模 ==")
+import numpy as np
+import stats_models as SM
+from scipy import stats as _sst
+
+_x = np.array([1.0, 2, 3, 4, 5, 6, 7, 8])
+_y = 2.5 * _x + 1.2
+_df2 = pd.DataFrame({"y": _y, "x": _x})
+_m = SM.ols(_df2, "y", ["x"])
+check("回归 斜率=2.5", _m["coef"][1], 2.5, 1e-9)
+check("回归 截距=1.2", _m["coef"][0], 1.2, 1e-9)
+check("回归 R²=1", _m["r2"], 1.0, 1e-9)
+
+_rng = np.random.default_rng(3)
+_a, _b = _rng.normal(10, 2, 80), _rng.normal(9, 2, 70)
+_tt = SM.welch_ttest(_a, _b)
+_ref = _sst.ttest_ind(_a, _b, equal_var=False)
+check("t 值", _tt["t"], float(_ref.statistic), 1e-9)
+check("p 值", _tt["p"], float(_ref.pvalue), 1e-12)
+
+_d = SM.decompose(100.0, 10.0, 120.0, 9.5)
+check("拆解 三项和=总变化", _d["eff_a"] + _d["eff_b"] + _d["interaction"], _d["delta"], 1e-9)
+
+_sk = pd.DataFrame({"u": ["A","A","B"], "d": ["2026-01-01","2026-02-01","2026-01-02"]})
+_co = SM.cohort(_sk, "u", "d")
+check("队列人数 A 月=2", int(_co["sizes"].iloc[0]), 2)
+check("队列大小列数", int(_co["matrix"].shape[1]), 2)
+
+print("\n== SQL 只读保护 ==")
+import sql_console as SQ
+_out, _err = SQ.run_sql(df, "SELECT COUNT(*) AS n FROM t")
+check("SQL 能查", int(_out.iloc[0, 0]), len(df))
+_out2, _err2 = SQ.run_sql(df, "DROP TABLE t")
+check("SQL 拦住写操作", 1 if _out2 is None and _err2 else 0, 1)
+
 print("\n== 目标达成 ==")
 tp = AN.target_progress(pd.Series([10.0, 20.0, 30.0]), 100, elapsed=0.5)
 check("达成率%", tp["rate"], 30.0)

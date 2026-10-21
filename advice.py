@@ -277,3 +277,39 @@ def build_advice(df, metric, qty_col=None, cost_col=None, cost_force="auto",
     sev_rank = {"高": 0, "中": 1, "低": 2}
     out.sort(key=lambda x: sev_rank.get(x["sev"], 3))
     return out
+
+
+def speech_script(facts):
+    """把结论组织成一段可以直接照着念的汇报话术。facts 里没有的项自动跳过。"""
+    period = facts.get("period") or "本期"
+    parts = []
+
+    head = f"{period}，"
+    if facts.get("rev"):
+        head += f"销售收入 {facts['rev']}"
+    if facts.get("margin"):
+        head += f"，毛利率 {facts['margin']}"
+    if facts.get("mom"):
+        head += f"，环比 {facts['mom']}"
+    parts.append(head.rstrip("，") + "。")
+
+    if facts.get("top_cat"):
+        seg = f"结构上，{facts['top_cat']}"
+        if facts.get("top_share"):
+            seg += f"贡献 {facts['top_share']} 的收入"
+        if facts.get("top_margin"):
+            seg += f"，是当前利润的主要来源" if facts.get("is_best") else f"，但毛利率只有 {facts['top_margin']}"
+        parts.append(seg + "。")
+
+    if facts.get("concern"):
+        parts.append(f"需要重点关注的是：{facts['concern']}。")
+
+    advs = [a["title"] for a in (facts.get("advice") or [])][:3]
+    if advs:
+        parts.append("接下来建议做三件事：" +
+                     "；".join(f"{i+1}）{t}" for i, t in enumerate(advs)) + "。")
+
+    if facts.get("ask"):
+        parts.append(f"需要支持：{facts['ask']}。")
+
+    return chr(10).join(parts)

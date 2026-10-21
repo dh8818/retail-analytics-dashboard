@@ -6,3 +6,6 @@ openpyxl==3.1.5
 # 汇报 PPT 导出（图表用 matplotlib 画，PPT 用 python-pptx 拼）
 python-pptx==1.0.2
 matplotlib==3.11.2
+# SQL 查询台 + 统计建模
+duckdb==1.5.6
+scipy==1.17.1
