@@ -1,0 +1,19 @@
+# 运行环境
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# 生成物
+output/
+*.pptx
+*.png
+!docs/*.png
+
+# 本机状态
+metric_formulas.json
+.streamlit/secrets.toml
+.DS_Store
+Thumbs.db

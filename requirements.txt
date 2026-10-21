@@ -1,0 +1,8 @@
+# 依赖锁版本：这些版本是这块代码实际跑通的组合，不要随手升级
+pandas==3.0.6
+plotly==7.1.0
+streamlit==1.66.0
+openpyxl==3.1.5
+# 汇报 PPT 导出（图表用 matplotlib 画，PPT 用 python-pptx 拼）
+python-pptx==1.0.2
+matplotlib==3.11.2
