@@ -758,16 +758,31 @@ with st.sidebar:
                            type=["xlsx", "xlsm", "xls", "csv"], accept_multiple_files=True)
     st.caption("数据只在本机内存里处理，不上传任何服务器。")
 
-# 未上传时可加载内置示例数据（公开演示用）
+# 未上传时：主区直接给上传入口（手机端侧栏是收起的，入口必须放在正文里）
 _DEMO_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "pos.csv")
+
 if not ups:
-    if os.path.exists(_DEMO_CSV):
-        st.info("上传 Excel / CSV 开始分析；也可以先用内置示例数据看看效果。")
-        if st.button("加载示例数据（便利店 3 个月 POS，约 4 万行）", key="demo_load"):
+    st.markdown(
+        "<div style='background:#fff;border:1px solid #E3E6EA;border-left:4px solid #1F3864;"
+        "border-radius:3px;padding:18px 20px 6px;margin:6px 0 10px'>"
+        "<div style='font-size:16px;font-weight:600;color:#1F2328;margin-bottom:4px'>上传你的销售数据</div>"
+        "<div style='font-size:12.5px;color:#5F6672;margin-bottom:10px'>"
+        "支持 Excel（.xlsx / .xlsm / .xls）与 CSV，可多选；文件只在你自己的浏览器里解析。</div></div>",
+        unsafe_allow_html=True)
+    _main_up = st.file_uploader(
+        "选择文件（可多选）", type=["xlsx", "xlsm", "xls", "csv"],
+        accept_multiple_files=True, key="main_up", label_visibility="collapsed")
+    if _main_up:
+        ups = _main_up
+
+    if not ups and os.path.exists(_DEMO_CSV):
+        st.markdown("<div style='font-size:12.5px;color:#5F6672;margin:10px 0 4px'>"
+                    "还没有数据？先用示例数据看看能出什么：</div>", unsafe_allow_html=True)
+        if st.button("加载示例数据（便利店 3 个月 POS，约 4 万行）", key="demo_load", type="primary"):
             st.session_state["_demo"] = True
             st.rerun()
-    if not st.session_state.get("_demo"):
-        st.info("👈 上传一个或多个 Excel / CSV，立刻开始分析。")
+
+    if not ups and not st.session_state.get("_demo"):
         st.markdown("""
         **会自动做的事**
         - 认出日期、数值、类别、编号列，不用改列名
@@ -776,6 +791,7 @@ if not ups:
         - 按数据形态自动选图：趋势用折线、对比用排序条形、构成用环形/树图、
           分布用直方图/箱线、关系用散点/相关矩阵、地理用气泡地图、期间对比用仪表盘
         """)
+        st.caption("手机上更多设置（主表、口径、筛选）在左上角 ☰ 里。")
         st.stop()
 
 try:
@@ -1514,11 +1530,18 @@ if _lead:
     _lead = re.sub(r"\*\*(.+?)\*\*", r"<b></b>", _lead)
     st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["概览", "趋势", "结构", "经营", "客户与归因", "数据与口径"])
+# 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
+_SECTIONS = ["概览", "趋势", "结构", "经营", "客户与归因", "数据与口径"]
+try:
+    _sec = st.segmented_control("模块", _SECTIONS, default=_SECTIONS[0],
+                                key="sec_pick", label_visibility="collapsed")
+except Exception:
+    _sec = st.radio("模块", _SECTIONS, horizontal=True, key="sec_pick",
+                    label_visibility="collapsed")
+_sec = _sec or _SECTIONS[0]
 
 # ---------------- 概览 ----------------
-with tab1:
+if _sec == "概览":
     if sums:
         st.markdown("<div class='sect'>业务总结<small>谁卖得好、什么时候好卖、谁真正赚钱</small></div>",
                     unsafe_allow_html=True)
@@ -1561,7 +1584,7 @@ with tab1:
                 st.markdown(f"<div class='insight'>{t}</div>", unsafe_allow_html=True)
 
 # ---------------- 趋势 ----------------
-with tab2:
+if _sec == "趋势":
     if metric and dc:
         r1 = st.columns([3, 2])
         with r1[0]:
@@ -1582,7 +1605,7 @@ with tab2:
         st.info("没有识别到时间列，趋势分析不可用。")
 
 # ---------------- 结构 ----------------
-with tab3:
+if _sec == "结构":
     if metric and (big or detail):
         r3 = st.columns([2, 3])
         with r3[0]:
@@ -1635,7 +1658,7 @@ with tab3:
         chart_card(chart_map(df, geo, metric), "map", 430)
 
 # ---------------- 经营 ----------------
-with tab4:
+if _sec == "经营":
     if oc and metric:
         XS.section_orders(df, oc, metric, qty_c, dc, chart_card, _order_key, _tie, _include_refunds)
     if oc and (detail or big):
@@ -1656,7 +1679,7 @@ with tab4:
         chart_card(chart_corr(df, num_cols), "corr", 340)
 
 # ---------------- 客户与归因 ----------------
-with tab5:
+if _sec == "客户与归因":
     if cust_col and dc and metric:
         XS.section_rfm(df, cust_col, dc, metric, chart_card)
     else:
@@ -1666,7 +1689,7 @@ with tab5:
         XS.section_compare(df, dc, metric, cat_cols, chart_card)
 
 # ---------------- 数据与口径 ----------------
-with tab6:
+if _sec == "数据与口径":
     st.markdown("<div class='sect'>数据概况</div>", unsafe_allow_html=True)
     kcols = st.columns(len(items[:5]))
     for i, (lab, val, sub) in enumerate(items[:5]):
