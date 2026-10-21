@@ -11,6 +11,7 @@ import streamlit as st
 from datetime import timedelta
 
 import analytics as AN
+import perf
 
 from style import (BI_BLUE, BI_NAVY, PALETTE, MUTED, GRID, fmt, fig_base)
 
@@ -69,7 +70,7 @@ def section_orders(df, oc, metric, qty_col, dc, card, key_mode="auto", tie="qty"
 
 # ---------------- 购物篮 ----------------
 def section_basket(df, oc, item_col, card):
-    rules = AN.basket_rules(df, oc, item_col)
+    rules = perf.get(f"basket:{oc}:{item_col}:{len(df)}", lambda: AN.basket_rules(df, oc, item_col))
     if rules is None or rules.empty:
         return
     st.markdown("<div class='sect'>购物篮<small>谁跟谁一起买——做套餐和陈列的依据</small></div>",
@@ -97,7 +98,8 @@ def section_basket(df, oc, item_col, card):
 
 # ---------------- 毛利结构 ----------------
 def section_margin(df, big, metric, cost_col, card, qty_col=None, force="auto"):
-    ms = AN.margin_structure(df, big, metric, cost_col, qty_col, force)
+    ms = perf.get(f"margin:{big}:{metric}:{cost_col}:{qty_col}:{force}:{len(df)}",
+                  lambda: AN.margin_structure(df, big, metric, cost_col, qty_col, force))
     if ms is None or len(ms) < 2:
         return
     st.markdown("<div class='sect'>毛利结构<small>钱从哪来 ≠ 利润从哪来</small></div>",
@@ -125,7 +127,7 @@ def section_margin(df, big, metric, cost_col, card, qty_col=None, force="auto"):
 
 # ---------------- 客户分层 ----------------
 def section_rfm(df, cust_col, dc, metric, card):
-    rfm = AN.rfm_table(df, cust_col, dc, metric)
+    rfm = perf.get(f"rfm:{cust_col}:{dc}:{metric}:{len(df)}", lambda: AN.rfm_table(df, cust_col, dc, metric))
     if rfm is None:
         return
     summ = AN.rfm_summary(rfm)

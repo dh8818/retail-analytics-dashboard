@@ -17,11 +17,15 @@ def _num(s):
     return pd.to_numeric(s, errors="coerce")
 
 
+_SAMPLE = 3000
+
+
 def _as_num_ratio(s):
     """这一列有多大比例能被解析成数字（用于识别"文本型数字"）。"""
     if s.dtype != object and not pd.api.types.is_string_dtype(s):
         return 0.0
-    v = s.replace(r"^\s*$", pd.NA, regex=True).dropna()
+    v = s.dropna().head(_SAMPLE)          # 抽样 3000 行足够判断类型
+    v = v[v.astype(str).str.strip() != ""]
     if v.empty:
         return 0.0
     cleaned = v.astype(str).str.replace(r"[¥$,\s，]", "", regex=True)
@@ -32,7 +36,8 @@ def _as_num_ratio(s):
 def _as_date_ratio(s):
     if s.dtype != object and not pd.api.types.is_string_dtype(s):
         return 0.0
-    v = s.replace(r"^\s*$", pd.NA, regex=True).dropna()
+    v = s.dropna().head(_SAMPLE)
+    v = v[v.astype(str).str.strip() != ""]
     if v.empty:
         return 0.0
     # pandas 3 不再自动推断混合格式（2026-01-05 与 2026/01/06 并存），必须显式 format="mixed"
@@ -85,7 +90,7 @@ def detect(df):
     space_cols = []
     for c in df.columns:
         if df[c].dtype == object or pd.api.types.is_string_dtype(df[c]):
-            v = df[c].dropna().astype(str)
+            v = df[c].dropna().head(_SAMPLE).astype(str)
             if len(v) and (v != v.str.strip()).any():
                 space_cols.append(c)
     if space_cols:

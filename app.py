@@ -28,6 +28,7 @@ import metrics as MT
 import advice as ADV
 import sql_console as SQ
 import nlq
+import perf
 import privacy_ui as PV
 import cleaning_ui as CU
 import cleaning as CL
@@ -357,7 +358,7 @@ def chart_stacked_time_cat(df, dc, cat, metric, gran="月"):
     d = df.dropna(subset=[dc, cat]).copy()
     if d.empty:
         return None
-    top = d.groupby(cat)[metric].sum().nlargest(6).index
+    top = d.groupby(cat)[metric].sum().nlargest(4 if _LITE else 6).index
     d = d[d[cat].isin(top)]
     d["_k"] = time_key(d[dc], gran)
     pv = d.pivot_table(index="_k", columns=cat, values=metric, aggfunc="sum").fillna(0)
@@ -451,7 +452,10 @@ def chart_hist(df, metric):
     s = to_numeric_col(df[metric]).dropna()
     if len(s) < 5:
         return None
-    f = go.Figure(go.Histogram(x=s, nbinsx=30, marker=dict(color=BI_BLUE, line=dict(width=0))))
+    if _LITE and len(s) > 20000:
+        s = s.sample(20000, random_state=0)
+    f = go.Figure(go.Histogram(x=s, nbinsx=20 if _LITE else 30,
+                               marker=dict(color=BI_BLUE, line=dict(width=0))))
     fig_base(f, 300, f"{metric} 分布（中位数 {fmt(s.median())}，看集中在哪个区间）")
     return f
 
@@ -502,6 +506,10 @@ def chart_scatter(df, x, y, color=None):
     # 有一列是常数时相关系数无意义，也不该让 numpy 报 RuntimeWarning
     if a[m].nunique() < 2 or b[m].nunique() < 2:
         return None
+    if _LITE:
+        idx = np.flatnonzero(m.to_numpy())[:800]
+        a = a.iloc[idx]; b = b.iloc[idx]
+        m = pd.Series(True, index=a.index)
     try:
         corr = float(np.corrcoef(a[m], b[m])[0, 1])
     except Exception:
@@ -513,7 +521,7 @@ def chart_scatter(df, x, y, color=None):
 
 
 def chart_corr(df, nums):
-    nums = [c for c in nums if df[c].notna().sum() > 10][:8]
+    nums = [c for c in nums if df[c].notna().sum() > 10][:6 if _LITE else 8]
     # 去掉常量列，否则相关系数会算出 NaN 并刷警告
     nums = [c for c in nums if to_numeric_col(df[c]).nunique() > 1]
     if len(nums) < 3:
@@ -913,6 +921,8 @@ detail_default = best_detail(big_default)
 
 with st.sidebar:
     st.markdown("#### 4. 分析设置")
+    _LITE = st.checkbox("省流模式（手机建议开启）", value=False, key="lite_mode",
+                        help="图表降采样、关闭悬停交互，手机上滑动更顺畅；分析结果不变")
     metric = (st.selectbox("主指标", num_cols,
                            index=num_cols.index(auto_metric) if auto_metric in num_cols else 0)
               if num_cols else None)
@@ -1250,6 +1260,11 @@ def business_summary(df, kinds, metric, dc, big, detail, num_cols, cost_force="a
 
 
 CHART_H = 330
+_LITE = False          # 省流模式：图表降采样、关交互，手机上更顺
+
+
+def _chart_config():
+    return {"displayModeBar": False, "staticPlot": True} if _LITE else MODEBAR
 
 
 def chart_card(fig, key, height=CHART_H):
@@ -1271,7 +1286,7 @@ def chart_card(fig, key, height=CHART_H):
             if st.button("⛶", key=f"z_{key}"):
                 st.session_state["_zoom"] = (go.Figure(fig), title)
                 st.rerun()
-        st.plotly_chart(fig, width="stretch", config=MODEBAR)
+        st.plotly_chart(fig, width="stretch", config=_chart_config())
 
 
 
@@ -1290,15 +1305,18 @@ if _zoom:
                 st.rerun()
         _zbig = go.Figure(_zfig)
         _zbig.update_layout(height=720, title=None, margin=dict(l=30, r=30, t=10, b=30))
-        st.plotly_chart(_zbig, width="stretch", config=MODEBAR)
+        st.plotly_chart(_zbig, width="stretch", config=_chart_config())
 
 
 # ---------- 清洗层：清洗后的数据会被全站使用 ----------
 _RAW_DF = df.copy()
 _DF_SIG = f"{len(_RAW_DF)}x{len(_RAW_DF.columns)}:" + ",".join(map(str, _RAW_DF.columns))
 _clean_state = st.session_state.get("_clean")
-if _clean_state and _clean_state.get("sig") == _DF_SIG:
+_clean_on = bool(_clean_state and _clean_state.get("sig") == _DF_SIG)
+if _clean_on:
     df = _clean_state["df"]
+# 缓存签名要区分「原始 / 清洗后」，否则清洗完还在用旧缓存
+perf.set_sig(f"{_DF_SIG}|clean={int(_clean_on)}|rows={len(df)}")
 
 # ---------- 核心四指标（单独一行） ----------
 _qty_c0 = next((c for c in num_cols
@@ -1392,9 +1410,11 @@ for _i, (_lab, _val, _sub, _color) in enumerate(_hero):
             f"<div class='kpi-sub'>{_sub}</div></div>", unsafe_allow_html=True)
 
 # ---------- 公共计算 ----------
-sums = business_summary(df, kinds, metric, dc, big, detail, num_cols, _cost_force)
-health = data_health(df, dc, metric, num_cols, refund_info, join_conflicts, sampled_from)
-ins = make_insights(df, kinds, metric, dc, big, detail)
+_k = f"{metric}:{dc}:{big}:{detail}:{_cost_force}:{len(df)}"
+sums = perf.get("sums:" + _k, lambda: business_summary(df, kinds, metric, dc, big, detail, num_cols, _cost_force))
+health = perf.get("health:" + _k, lambda: data_health(df, dc, metric, num_cols, refund_info,
+                                                     join_conflicts, sampled_from))
+ins = perf.get("ins:" + _k, lambda: make_insights(df, kinds, metric, dc, big, detail))
 oc = AN.pick_order_col(df)
 cust_col = AN.find_col(df.columns, AN.CUST_HINT)
 cost_c = AN.find_col(df.columns, AN.COST_HINT, exclude={metric})
@@ -1535,7 +1555,9 @@ if dict_at_top:
 # 分页
 # ============================================================
 # ---------- 本期要点（一句话结论，汇报时直接念） ----------
-_issues_n = len(CL.detect(_RAW_DF)) if not (_clean_state and _clean_state.get("sig") == _DF_SIG) else 0
+_issues_n = 0
+if not (_clean_state and _clean_state.get("sig") == _DF_SIG):
+    _issues_n = len(perf.get("clean_issues", lambda: CL.detect(_RAW_DF)))
 if _issues_n:
     st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
                 f"检测到 <b>{_issues_n} 类</b>数据问题（重复行 / 文本型数字 / 缺失等），"
@@ -1573,8 +1595,9 @@ if _sec == "概览":
                     st.markdown(
                         f"<div class='sumcard'><div class='sumhead'>{it['icon']} {it['title']}</div>"
                         f"<div class='sumtext'>{it['text']}</div></div>", unsafe_allow_html=True)
-    _adv = ADV.build_advice(df, metric, qty_c, _cost_c0, _cost_force, dc,
-                            detail or big, big, oc, float(target_amount or 0))
+    _adv = perf.get(f"advice:{metric}:{qty_c}:{_cost_c0}:{dc}:{detail}:{big}:{oc}:{target_amount}:{len(df)}",
+                    lambda: ADV.build_advice(df, metric, qty_c, _cost_c0, _cost_force, dc,
+                                             detail or big, big, oc, float(target_amount or 0)))
     if _adv:
         st.markdown("<div class='sect'>改善建议<small>按你这份数据算的，每条都带依据；预期是粗估，不是承诺</small></div>",
                     unsafe_allow_html=True)
@@ -1612,7 +1635,8 @@ if _sec == "概览":
             st.caption("数字全部来自当前这份数据；口径改了，话术也跟着变。")
 
     if oc and metric:
-        _o_tab, _om = AN.order_metrics(df, oc, metric, qty_c, dc, _order_key, _tie, _include_refunds)
+        _o_tab, _om = perf.get(f"om:{oc}:{metric}:{qty_c}:{dc}:{_order_key}:{_tie}:{_include_refunds}:{len(df)}",
+                               lambda: AN.order_metrics(df, oc, metric, qty_c, dc, _order_key, _tie, _include_refunds))
         if _om:
             st.markdown("<div class='sect'>关键指标<small>订单级口径，和上面的行级指标不是一回事</small></div>",
                         unsafe_allow_html=True)
@@ -1665,7 +1689,7 @@ if _sec == "结构":
                     try:
                         _ev = st.plotly_chart(_dn, key="dn_drill", on_select="rerun",
                                               selection_mode="points", width="stretch",
-                                              config=MODEBAR)
+                                              config=_chart_config())
                         _pts = (_ev or {}).get("selection", {}).get("points", [])                             if isinstance(_ev, dict) else []
                         if _pts:
                             _lab = _pts[0].get("label") or _pts[0].get("legendgroup")
@@ -1673,7 +1697,7 @@ if _sec == "结构":
                                 st.session_state["_drill"] = (big, _lab)
                                 st.rerun()
                     except Exception:
-                        st.plotly_chart(_dn, width="stretch", config=MODEBAR)
+                        st.plotly_chart(_dn, width="stretch", config=_chart_config())
                 if big:
                     _src = _pre_filter_df if big in _pre_filter_df.columns else df
                     _dv_opts = _src[big].dropna().astype(str).value_counts().head(30).index.tolist()
