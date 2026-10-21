@@ -163,6 +163,31 @@ check("SQL 能查", int(_out.iloc[0, 0]), len(df))
 _out2, _err2 = SQ.run_sql(df, "DROP TABLE t")
 check("SQL 拦住写操作", 1 if _out2 is None and _err2 else 0, 1)
 
+print("\n== 数据清洗 ==")
+import cleaning as CL
+_dirty = pd.DataFrame({
+    " 日期 ": ["2026-01-05", "2026/01/06", "2026-01-07", "2026-01-05"],
+    "品类": ["饮料", " 饮料", "零食", "饮料"],
+    "金额": ["¥1,200", "2000", "300", "¥1,200"],
+    "数量": [2, 3, 1, 5],
+    "空列": [None] * 4,
+})
+_dirty = pd.concat([_dirty, _dirty.iloc[[0]]], ignore_index=True)
+_iss = CL.detect(_dirty)
+_kinds = " ".join(i["问题"] for i in _iss)
+check("体检发现重复行", 1 if "重复" in _kinds else 0, 1)
+check("体检发现文本型数字", 1 if "文本" in _kinds and "数字" in _kinds else 0, 1)
+check("体检发现空格", 1 if "空格" in _kinds else 0, 1)
+
+_clean, _log, _stats = CL.clean(_dirty, {"fill": "不处理"})
+check("去重后行数", len(_clean), 4)
+check("金额转数值求和", float(_clean["金额"].sum()), 1200 + 2000 + 300 + 1200, 1e-6)
+check("品类去空格后唯一值", len(set(_clean["品类"])), 2)
+check("日期转成日期类型", 1 if "datetime" in str(_clean["日期"].dtype) else 0, 1)
+check("空列被删", 1 if "空列" not in _clean.columns else 0, 1)
+_clean2, _log2, _ = CL.clean(_clean, {"fill": "不处理"})
+check("再洗一次不再变化", len(_clean2.columns), len(_clean.columns))
+
 print("\n== 目标达成 ==")
 tp = AN.target_progress(pd.Series([10.0, 20.0, 30.0]), 100, elapsed=0.5)
 check("达成率%", tp["rate"], 30.0)

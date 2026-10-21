@@ -27,6 +27,8 @@ import custom_metrics as CM
 import metrics as MT
 import advice as ADV
 import sql_console as SQ
+import cleaning_ui as CU
+import cleaning as CL
 import advanced_ui as AU
 try:
     import ppt_export as PE
@@ -1288,6 +1290,13 @@ if _zoom:
         st.plotly_chart(_zbig, width="stretch", config=MODEBAR)
 
 
+# ---------- 清洗层：清洗后的数据会被全站使用 ----------
+_RAW_DF = df.copy()
+_DF_SIG = f"{len(_RAW_DF)}x{len(_RAW_DF.columns)}:" + ",".join(map(str, _RAW_DF.columns))
+_clean_state = st.session_state.get("_clean")
+if _clean_state and _clean_state.get("sig") == _DF_SIG:
+    df = _clean_state["df"]
+
 # ---------- 核心四指标（单独一行） ----------
 _qty_c0 = next((c for c in num_cols
                 if c != metric and any(h in str(c).lower() for h in ("数量", "销量", "件数", "qty", "quantity"))), None)
@@ -1523,6 +1532,12 @@ if dict_at_top:
 # 分页
 # ============================================================
 # ---------- 本期要点（一句话结论，汇报时直接念） ----------
+_issues_n = len(CL.detect(_RAW_DF)) if not (_clean_state and _clean_state.get("sig") == _DF_SIG) else 0
+if _issues_n:
+    st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
+                f"检测到 <b>{_issues_n} 类</b>数据问题（重复行 / 文本型数字 / 缺失等），"
+                f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
+
 _lead = ""
 if sums:
     _lead = str(sums[0].get("text", ""))
@@ -1533,7 +1548,7 @@ if _lead:
     st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
 
 # 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
-_SECTIONS = ["概览", "趋势", "结构", "经营", "客户与归因", "SQL 查询", "统计建模", "数据与口径"]
+_SECTIONS = ["概览", "数据清洗", "趋势", "结构", "经营", "客户与归因", "SQL 查询", "统计建模", "数据与口径"]
 try:
     _sec = st.segmented_control("模块", _SECTIONS, default=_SECTIONS[0],
                                 key="sec_pick", label_visibility="collapsed")
@@ -1610,6 +1625,9 @@ if _sec == "概览":
                 st.markdown(f"<div class='insight'>{t}</div>", unsafe_allow_html=True)
 
 # ---------------- 趋势 ----------------
+if _sec == "数据清洗":
+    CU.render(_RAW_DF, _DF_SIG)
+
 if _sec == "趋势":
     if metric and dc:
         r1 = st.columns([3, 2])
