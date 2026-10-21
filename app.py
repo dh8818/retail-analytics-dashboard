@@ -972,7 +972,14 @@ detail_default = best_detail(big_default)
 
 with st.sidebar:
     st.markdown("#### 4. 分析设置")
-    _LITE = st.checkbox("省流模式（手机建议开启）", value=False, key="lite_mode",
+    _ua = ""
+    try:
+        _ua = str(st.context.headers.get("User-Agent", ""))
+    except Exception:
+        pass
+    if "lite_mode" not in st.session_state:
+        st.session_state["lite_mode"] = bool(re.search(r"Mobi|Android|iPhone|iPad", _ua))
+    _LITE = st.checkbox("省流模式（手机建议开启）", key="lite_mode",
                         help="图表降采样、关闭悬停交互，手机上滑动更顺畅；分析结果不变")
     metric = (st.selectbox("主指标", num_cols,
                            index=num_cols.index(auto_metric) if auto_metric in num_cols else 0)
@@ -1311,7 +1318,9 @@ def business_summary(df, kinds, metric, dc, big, detail, num_cols, cost_force="a
 
 
 CHART_H = 330
-_LITE = False          # 省流模式：图表降采样、关交互，手机上更顺
+# 省流模式：图表降采样、关交互，手机上更顺。
+# 注意不要在下面再写 _LITE = False，那会把侧栏里用户勾的值盖掉（之前就是这么失效的）
+_LITE = bool(st.session_state.get("lite_mode", False))
 
 
 def _chart_config():
