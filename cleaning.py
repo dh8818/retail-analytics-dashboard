@@ -52,6 +52,20 @@ def _as_date_ratio(s):
     return float(parsed.notna().mean())
 
 
+def _mad_flags(x, k=3.5):
+    """MAD 离群判定。金额/单价这类正值右偏列在对数空间算，
+    否则中位数被压得很低，一半的真实大单都会被判成异常值。"""
+    v = _num(x)
+    nn = v.notna()
+    positive = bool(nn.any()) and bool((v[nn] > 0).mean() >= 0.95) and v[nn].median() > 0
+    base = np.log1p(v) if positive else v
+    med = base.median()
+    mad = (base - med).abs().median()
+    if not np.isfinite(mad) or mad == 0:
+        return pd.Series(False, index=x.index)
+    return ((0.6745 * (base - med) / mad).abs() > k)
+
+
 def detect(df):
     """返回问题清单：[{级别, 问题, 定位, 数量, 建议}]"""
     out = []
@@ -108,17 +122,14 @@ def detect(df):
         x = _num(df[c]).dropna()
         if len(x) < 20:
             continue
-        med = x.median()
-        mad = (x - med).abs().median()
-        if mad == 0:
-            continue
-        z = 0.6745 * (x - med) / mad
-        mask = z.abs() > 3.5
+        mask = _mad_flags(df[c].reindex(x.index)).reindex(x.index).fillna(False)
         k = int(mask.sum())
-        # 超过 5% 的样本被判离群 → 这是长尾（金额、单价天然右偏），不是脏数据
-        if k and k / max(len(x), 1) <= 0.05:
+        if not k:
+            continue
+        # 仍然超过 2% 被判离群 → 说明只是长尾分布，不该提示用户去删
+        if k / max(len(x), 1) <= 0.02:
             outliers[c] = k
-        elif k:
+        else:
             longtail[c] = k
     if longtail:
         out.append({"级别": "低", "问题": "长尾分布（右偏，不必删）",
@@ -242,16 +253,10 @@ def clean(df, opts):
         total = 0
         skipped = []
         for c in [c for c in d.columns if pd.api.types.is_numeric_dtype(d[c])]:
-            x = _num(d[c])
-            med = x.median()
-            mad = (x - med).abs().median()
-            if not np.isfinite(mad) or mad == 0:
-                continue
-            z = 0.6745 * (x - med) / mad
-            if float((z.abs() > thr).mean()) > 0.05:
+            mask = _mad_flags(d[c], thr)
+            if float(mask.mean()) > 0.02:
                 skipped.append(c)
                 continue
-            mask = z.abs() > thr
             k = int(mask.sum())
             if k:
                 d = d[~mask]

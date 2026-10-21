@@ -302,6 +302,15 @@ def series_by(df, dc, metric, gran):
 # ============================================================
 # 图表工厂
 # ============================================================
+def safe_fig(fn, *args, **kwargs):
+    """画图失败时把原因写在原位，避免整页只剩标题。"""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        st.caption(f"这张图暂时画不出来：{type(e).__name__}: {e}")
+        return None
+
+
 def chart_trend(df, dc, metric, gran):
     g = series_by(df, dc, metric, gran)
     if g is None or len(g) < 2:
@@ -597,27 +606,7 @@ def chart_gauge(df, dc, metric, gran, mode="环比"):
     if prev <= 0:
         return None
     # 本期没走完就别拿它跟整月比：换算成日均，并在标题写清天数
-    _note = ""
-    _dmax = pd.to_datetime(df[dc], errors="coerce").max()
-    _freq = {"月": "M", "季度": "Q", "周": "W"}.get(gran)
-    if _freq and pd.notna(_dmax):
-        _per = pd.Period(_dmax, freq=_freq)
-        _elapsed = (_dmax.normalize() - _per.start_time).days + 1
-        _total = (_per.end_time.normalize() - _per.start_time).days + 1
-        if 0 < _elapsed < _total:
-            _pp = _per - 1
-            _prev_days = (_pp.end_time.normalize() - _pp.start_time).days + 1
-            _cur_avg = cur / _elapsed
-            _prev_avg = prev / max(_prev_days, 1)
-            if _prev_avg > 0:
-                ratio = _cur_avg / _prev_avg
-                _note = f"（本期 {_elapsed}/{_total} 天，按日均对比）"
-            else:
-                ratio = cur / prev
-        else:
-            ratio = cur / prev
-    else:
-        ratio = cur / prev
+    ratio, _note = AN.period_ratio(df, dc, gran, cur, prev)
     f = go.Figure(go.Indicator(
         mode="gauge+number+delta",
         value=round(ratio * 100, 1),
@@ -1746,12 +1735,12 @@ if _sec == "趋势":
     if metric and dc:
         r1 = st.columns([3, 2])
         with r1[0]:
-            chart_card(chart_trend(df, dc, metric, gran), "trend", 340)
+            chart_card(safe_fig(chart_trend, df, dc, metric, gran), "trend", 340)
         with r1[1]:
-            chart_card(chart_gauge(df, dc, metric, gran, cmp_mode), "gauge", 340)
+            chart_card(safe_fig(chart_gauge, df, dc, metric, gran, cmp_mode), "gauge", 340)
         r2 = st.columns(3)
         with r2[0]:
-            chart_card(chart_quarter(df, dc, metric), "quarter")
+            chart_card(safe_fig(chart_quarter, df, dc, metric), "quarter")
         with r2[1]:
             chart_card(chart_year_month_heat(df, dc, metric), "ymheat")
         with r2[2]:
@@ -1809,7 +1798,7 @@ if _sec == "结构":
         if dc and big:
             r5 = st.columns(2)
             with r5[0]:
-                chart_card(chart_heat_cat(df, dc, big, metric), "catheat")
+                chart_card(safe_fig(chart_heat_cat, df, dc, big, metric), "catheat")
             with r5[1]:
                 chart_card(chart_stacked_time_cat(df, dc, big, metric, "月"), "stack")
     if geo and metric:

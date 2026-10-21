@@ -359,3 +359,22 @@ def compare_periods(df, date_col, metric, cur, base, dim=None):
         res["delta_series"] = dl
     res["lines"] = lines
     return res
+
+
+def period_ratio(df, dc, gran, cur, prev):
+    """末期不完整时按日均对比，返回 (比值, 需要写在标题上的说明)。"""
+    _dmax = pd.to_datetime(df[dc], errors="coerce").max()
+    _freq = {"月": "M", "季度": "Q", "周": "W"}.get(gran)
+    if not _freq or pd.isna(_dmax):
+        return cur / prev, ""
+    per = pd.Period(_dmax, freq=_freq)
+    elapsed = (_dmax.normalize() - per.start_time).days + 1
+    total = (per.end_time.normalize() - per.start_time).days + 1
+    if not (0 < elapsed < total):
+        return cur / prev, ""
+    pp = per - 1
+    prev_days = (pp.end_time.normalize() - pp.start_time).days + 1
+    prev_avg = prev / max(prev_days, 1)
+    if prev_avg <= 0:
+        return cur / prev, ""
+    return (cur / elapsed) / prev_avg, f"（本期 {elapsed}/{total} 天，按日均对比）"
