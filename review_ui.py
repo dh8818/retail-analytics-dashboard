@@ -30,7 +30,8 @@ def from_advice(adv_list):
 def render(adv_list):
     st.markdown("<div class='sect'>经营行动与复盘<small>做了什么、效果如何——把分析变成闭环</small></div>",
                 unsafe_allow_html=True)
-    st.caption("通用报表止步于「发生了什么」；这一页记录「做了什么、结果怎样」，也是面试时最能讲的部分。")
+    st.caption("报表回答「发生了什么」，这一页回答「改了什么、结果如何」。"
+               "每条行动都有负责人、时间、预期与实际，效果可回溯、可交接。")
 
     cur = _store()
     c1, c2, c3 = st.columns([1.2, 1.2, 3])

@@ -27,7 +27,7 @@ def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
     _sect("库存与订货", "缺货、临期、报损、该订多少——每个结论都能摊开算给你看")
     st.markdown(
         "<div class='insight' style='border-left-color:#C55A11'>"
-        "<b>数据说明（请如实告知面试官）</b>：销量与金额来自你上传的真实销售明细；"
+        "<b>数据说明</b>：销量与金额来自你上传的销售明细；"
         "<b>期初库存、到货、在途、保质期、报损为策略仿真生成</b>（补货点 + 目标库存策略，FIFO 过期报损）。"
         "接入门店系统的库存快照后，这一页无需改代码即可换成真实数据。</div>",
         unsafe_allow_html=True)

@@ -40,11 +40,15 @@ def _as_date_ratio(s):
     v = v[v.astype(str).str.strip() != ""]
     if v.empty:
         return 0.0
-    # pandas 3 不再自动推断混合格式（2026-01-05 与 2026/01/06 并存），必须显式 format="mixed"
+    txt = v.astype(str).str.strip()
+    # 必须先有「年」才算日期：否则 12:30:05 这种时间列会被 pandas 当成今天的日期
+    has_year = txt.str.contains(r"(19|20)\d{2}", regex=True)
+    if has_year.mean() < 0.5:
+        return 0.0
     try:
-        parsed = pd.to_datetime(v.astype(str).str.slice(0, 19), errors="coerce", format="mixed")
+        parsed = pd.to_datetime(txt.str.slice(0, 19), errors="coerce", format="mixed")
     except TypeError:
-        parsed = pd.to_datetime(v.astype(str).str.slice(0, 19), errors="coerce")
+        parsed = pd.to_datetime(txt.str.slice(0, 19), errors="coerce")
     return float(parsed.notna().mean())
 
 

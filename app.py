@@ -84,7 +84,12 @@ GRAN = {"年": "YS", "季度": "QS", "月": "MS", "周": "W-MON", "日": "D"}
 
 
 def to_datetime_col(s):
-    return pd.to_datetime(s, errors="coerce")
+    # pandas 3 不再自动推断混合格式：2026/03/05 与 2026.3.5 混在一列时，
+    # 不加 format="mixed" 会把能解析的也变成 NaT，进而被静默丢行
+    try:
+        return pd.to_datetime(s, errors="coerce", format="mixed")
+    except TypeError:
+        return pd.to_datetime(s, errors="coerce")
 
 
 def to_numeric_col(s):
@@ -190,14 +195,16 @@ def load_any(name, raw):
             continue
     else:
         raise ValueError("CSV 编码认不出来")
+    # 每个 CSV 当成独立的一张表，表名用文件名（否则多个 CSV 会被纵向拼成一张）
+    _sheet = os.path.splitext(os.path.basename(name))[0] or "CSV"
     for sep in (",", "\t", ";"):
         try:
             df = pd.read_csv(io.StringIO(txt), sep=sep)
             if df.shape[1] > 1:
-                return {"CSV": df}
+                return {_sheet: df}
         except Exception:
             pass
-    return {"CSV": pd.read_csv(io.StringIO(txt))}
+    return {_sheet: pd.read_csv(io.StringIO(txt))}
 
 
 # ---------- 表关系 ----------
@@ -209,7 +216,9 @@ def detect_join(fact, dim):
             continue
         uniq_ratio = dv.nunique() / len(dv)
         pk_hint = any(h in str(pk).lower() for h in ID_HINT)
-        if uniq_ratio < 0.9 and not pk_hint:
+        # 维表主键必须近乎唯一（留 5% 容脏），否则 JOIN 会扇出：
+        # 例如按月快照的库存表，同一个商品有 15 行，关联后每条明细会被复制 15 次
+        if uniq_ratio < 0.95:
             continue
         vals = set(dv)
         if not [c for c in dim.columns if c != pk and c not in fact.columns]:
@@ -785,7 +794,7 @@ PV.badge()
 
 with st.sidebar:
     st.markdown("#### 1. 上传数据")
-    ups = st.file_uploader("选择 Excel 或 CSV（可多选，自动按列名纵向合并）",
+    ups = st.file_uploader("上传数据：Excel 或 CSV（多个文件可一次全选，每个文件算一张表）",
                            type=["xlsx", "xlsm", "xls", "csv"], accept_multiple_files=True)
     st.caption("数据只在本机内存里处理，不上传任何服务器。")
 
@@ -1374,7 +1383,7 @@ if _oc0:
     _key0 = df[_oc0].astype(str)
     _plus_date = False
     if dc and dc in df.columns and str(_order_key) != "订单号原样":
-        _dts = pd.to_datetime(df[dc], errors="coerce")
+        _dts = to_datetime_col(df[dc])
         if str(_order_key).startswith("订单号+日期"):
             _plus_date = True
         else:      # auto：订单号跨期重复时自动加上日期，和 analytics 同一套判断
@@ -1644,7 +1653,7 @@ if _sec == "概览":
     if metric:
         _period, _mom_txt, _top_cat, _top_share = "本期", "", "", ""
         if dc:
-            _dts = pd.to_datetime(df[dc], errors="coerce")
+            _dts = to_datetime_col(df[dc])
             _gg = pd.to_numeric(df[metric], errors="coerce").groupby(_dts.dt.to_period("M")).sum()
             _gg = _gg[_gg.index.notna()]
             if len(_gg) >= 2 and _gg.iloc[-2]:
