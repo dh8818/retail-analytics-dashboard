@@ -275,8 +275,12 @@ check("报损不为负", 1 if (_snap["报损"] >= 0).all() else 0, 1)
 _g = INV.sku_summary(_snap)
 check("报损率不超过 100%", 1 if _g["报损率%"].max() < 100 else 0, 1)
 _row = _g.iloc[0]
-_target = _row["日均销量"] * 5 + _row["日均销量"] * _row["交货周期"] * 0.5
-check("订货量公式可复算", max(0.0, round(_target - _row["库存位置"], 1)),
+_cover = int(_row.get("覆盖天数", 5) or 5)
+_target = _row["日均销量"] * _cover + _row["日均销量"] * _row["交货周期"] * 0.5
+_expect = max(0.0, _target - _row["库存位置"])
+if _row["保质期"] <= 3:                      # 鲜食按保质期封顶
+    _expect = min(_expect, _row["日均销量"] * _row["保质期"] * 0.8)
+check("订货量公式可复算", round(_expect, 1),
       round(float(_row["建议订货"]), 1), 1e-6)
 _k = INV.health_kpis(_g)
 check("缺货率在 0-100 之间", 1 if 0 <= _k["缺货率%"] <= 100 else 0, 1)

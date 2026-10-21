@@ -16,8 +16,17 @@ from style import MUTED, TEXT, BI_NAVY
 TABLE = "t"
 MAX_ROWS = 5000
 _BLOCKED = re.compile(
-    r"\b(insert|update|delete|drop|alter|create|replace|truncate|attach|detach|copy|export|import|install|load|pragma)\b",
+    r"\b(insert|update|delete|drop|alter|create|truncate|attach|detach|copy|export|import|install|load|pragma)\b",
     re.I)
+
+
+def _strip_literals(q):
+    """去掉字符串常量与注释，只留代码骨架，避免 'create' 这类字面量被当成写操作。"""
+    q = re.sub(r"--[^\n]*", " ", q)
+    q = re.sub(r"/\*.*?\*/", " ", q, flags=re.S)
+    q = re.sub(r"'(?:[^']|'')*'", "''", q)
+    q = re.sub(r'"(?:[^"]|"")*"', '""', q)
+    return q
 
 
 def run_sql(df, sql, limit=MAX_ROWS):
@@ -27,7 +36,7 @@ def run_sql(df, sql, limit=MAX_ROWS):
         return None, "SQL 是空的"
     if not re.match(r"^(select|with)\b", q, re.I):
         return None, "只允许 SELECT / WITH 查询"
-    if _BLOCKED.search(q):
+    if _BLOCKED.search(_strip_literals(q)):
         return None, "检测到写操作关键字，这里只接受只读查询"
     con = duckdb.connect()
     try:

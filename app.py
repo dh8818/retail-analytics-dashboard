@@ -207,6 +207,12 @@ def load_any(name, raw):
     return {_sheet: pd.read_csv(io.StringIO(txt))}
 
 
+def user_cols(df):
+    """导出/计数时只给用户看的列：去掉 成本额_计算、订单键_计算 这类内部列。"""
+    return [c for c in df.columns
+            if not str(c).endswith("_计算") and not str(c).startswith("_")]
+
+
 # ---------- 表关系 ----------
 def detect_join(fact, dim):
     best = None
@@ -590,7 +596,28 @@ def chart_gauge(df, dc, metric, gran, mode="环比"):
             cmp_label = f"去年同{gran}"
     if prev <= 0:
         return None
-    ratio = cur / prev
+    # 本期没走完就别拿它跟整月比：换算成日均，并在标题写清天数
+    _note = ""
+    _dmax = pd.to_datetime(df[dc], errors="coerce").max()
+    _freq = {"月": "M", "季度": "Q", "周": "W"}.get(gran)
+    if _freq and pd.notna(_dmax):
+        _per = pd.Period(_dmax, freq=_freq)
+        _elapsed = (_dmax.normalize() - _per.start_time).days + 1
+        _total = (_per.end_time.normalize() - _per.start_time).days + 1
+        if 0 < _elapsed < _total:
+            _pp = _per - 1
+            _prev_days = (_pp.end_time.normalize() - _pp.start_time).days + 1
+            _cur_avg = cur / _elapsed
+            _prev_avg = prev / max(_prev_days, 1)
+            if _prev_avg > 0:
+                ratio = _cur_avg / _prev_avg
+                _note = f"（本期 {_elapsed}/{_total} 天，按日均对比）"
+            else:
+                ratio = cur / prev
+        else:
+            ratio = cur / prev
+    else:
+        ratio = cur / prev
     f = go.Figure(go.Indicator(
         mode="gauge+number+delta",
         value=round(ratio * 100, 1),
@@ -605,7 +632,7 @@ def chart_gauge(df, dc, metric, gran, mode="环比"):
                          {"range": [120, 200], "color": "#E7F4E4"}],
                "threshold": {"line": {"color": "#E66C37", "width": 3},
                              "thickness": 0.8, "value": 100}}))
-    fig_base(f, 250, f"最近一个{gran} vs {cmp_label}（100%＝持平，{fmt(cur)} vs {fmt(prev)}）")
+    fig_base(f, 250, f"最近一个{gran} vs {cmp_label}（100%＝持平，{fmt(cur)} vs {fmt(prev)}）{_note}")
     return f
 
 
@@ -801,7 +828,7 @@ with st.sidebar:
 # 未上传时：主区直接给上传入口（手机端侧栏是收起的，入口必须放在正文里）
 _DEMO_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "pos.csv")
 
-if not ups:
+if not ups and not st.session_state.get("_demo"):
     st.markdown(
         "<div style='background:#fff;border:1px solid #E3E6EA;border-left:4px solid #1F3864;"
         "border-radius:3px;padding:18px 20px 6px;margin:6px 0 10px'>"
@@ -837,7 +864,17 @@ if not ups:
 try:
     sheets = {}
     if not ups and st.session_state.get("_demo"):
-        sheets["示例数据"] = pd.read_csv(_DEMO_CSV, encoding="utf-8-sig")
+        _d = pd.read_csv(_DEMO_CSV, encoding="utf-8-sig")
+        # 示例 POS 没有会员列，客户与归因会整页空白；合成一列会员号，让 RFM/复购能演示
+        if "会员编号" not in _d.columns:
+            _rng = np.random.default_rng(2026)
+            _ids = np.array([f"M{i:04d}" for i in range(1, 401)])
+            _w = 1.0 / np.arange(1, 401) ** 0.85
+            _pick = _rng.choice(_ids, size=len(_d), p=_w / _w.sum())
+            _hit = _rng.random(len(_d)) < 0.45
+            # pandas 3 / numpy 2 不允许 str 与 nan 混在一个 ndarray，用 Series.where
+            _d["会员编号"] = pd.Series(_pick, index=_d.index).where(_hit)
+        sheets["示例数据"] = _d
     for f in (ups or []):
         one = _load_cached(f.name, f.getvalue())
         for k, v in one.items():
@@ -1408,7 +1445,7 @@ _FM_DEFAULT = MT.build_defaults(metric, _qty_c0, _COST_TMP if _cost_line is not 
                                 _ORDER_TMP if _oc0 else None)
 _fm_sig = "|".join(f"{k}={v}" for k, v in _FM_DEFAULT.items())
 if st.session_state.get("_fm_sig") != _fm_sig:
-    _saved_fm = MT.sanitize(MT.load_overrides(MT_FILE), df)
+    _saved_fm = st.session_state.get("_fm_saved") or MT.sanitize(MT.load_overrides(MT_FILE), df)
     for _k, _v in _FM_DEFAULT.items():
         st.session_state[f"fm_{_k}"] = _saved_fm.get(_k) or _v
     st.session_state["_fm_sig"] = _fm_sig
@@ -1470,7 +1507,8 @@ if _warn_n:
                 f"⚠ 数据体检发现 {_warn_n} 处需要注意，详见「数据与口径」页</div>",
                 unsafe_allow_html=True)
 
-items = [("数据行数", f"{len(df):,}", sheet), ("列数", f"{df.shape[1]}", "已忽略空列")]
+_uc = len(user_cols(df))
+items = [("数据行数", f"{len(df):,}", sheet), ("列数", f"{_uc}", "不含内部计算列")]
 if dc:
     items.append(("覆盖天数", f"{(df[dc].max()-df[dc].min()).days}", "min~max"))
 if big:
@@ -1550,9 +1588,14 @@ def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
                              f"= {MT.display(_m, MV.get(_m))}</div>", unsafe_allow_html=True)
         _b1, _b2, _ = st.columns([1.1, 1.1, 2.2])
         if _b1.button("💾 保存公式", key="fm_save"):
-            MT.save_overrides(MT_FILE, {k: st.session_state.get(f"fm_{k}", v) for k, v in _FM_DEFAULT.items()})
-            st.success("已保存到 metric_formulas.json，下次打开还是这套")
+            _fm_now = {k: st.session_state.get(f"fm_{k}", v) for k, v in _FM_DEFAULT.items()}
+            st.session_state["_fm_saved"] = _fm_now
+            if MT.save_overrides(MT_FILE, _fm_now):
+                st.success("已保存（本机模式：写入 metric_formulas.json）")
+            else:
+                st.success("已保存到当前浏览器会话：刷新还在；换人或换设备看到的是默认口径")
         if _b2.button("↺ 恢复默认", key="fm_reset"):
+            st.session_state.pop("_fm_saved", None)
             MT.save_overrides(MT_FILE, {})
             # 只赋值没用（widget 自己的 state 会盖掉），要删 key 再重跑
             for k in _FM_DEFAULT:
@@ -1598,11 +1641,16 @@ if dict_at_top:
 # ============================================================
 # ---------- 本期要点（一句话结论，汇报时直接念） ----------
 _issues_n = 0
+_issues = []
 if not (_clean_state and _clean_state.get("sig") == _DF_SIG):
-    _issues_n = len(perf.get("clean_issues", lambda: CL.detect(_RAW_DF)))
+    _issues = perf.get("clean_issues", lambda: CL.detect(_RAW_DF))
+    _issues_n = len(_issues)
 if _issues_n:
+    _names = "、".join(i["问题"] for i in _issues[:3])
+    if _issues_n > 3:
+        _names += " 等"
     st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
-                f"检测到 <b>{_issues_n} 类</b>数据问题（重复行 / 文本型数字 / 缺失等），"
+                f"检测到 <b>{_issues_n} 类</b>数据问题：{_names}，"
                 f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
 
 _lead = ""
@@ -1901,7 +1949,7 @@ if _sec == "数据与口径":
 
     with st.expander("查看数据明细（前 200 行）"):
         st.dataframe(df.head(200), width="stretch")
-        st.download_button("下载当前数据 CSV", df.to_csv(index=False).encode("utf-8-sig"),
+        st.download_button("下载当前数据 CSV", df[user_cols(df)].to_csv(index=False).encode("utf-8-sig"),
                            file_name=f"分析数据_{sheet}.csv", mime="text/csv")
 
     with st.expander("导出汇报 PPT（含图表与解读）", expanded=False):
@@ -1952,7 +2000,7 @@ if _sec == "数据与口径":
                                     "值": round(_v, 4) if _v is not None else None,
                                     "错误": _err or ""})
                     pd.DataFrame(_cr).to_excel(w, sheet_name="自定义指标", index=False)
-                df.head(5000).to_excel(w, sheet_name="数据明细", index=False)
+                df[user_cols(df)].head(5000).to_excel(w, sheet_name="数据明细", index=False)
             st.session_state["_xlsx"] = buf.getvalue()
         if st.session_state.get("_xlsx"):
             st.download_button(

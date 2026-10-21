@@ -187,7 +187,10 @@ def margin_structure(df, cat_col, metric, cost_col, qty_col=None, force="auto"):
 def rfm_table(df, cust_col, date_col, metric):
     if not cust_col or not date_col:
         return None
-    d = df[[cust_col, date_col, metric]].dropna(subset=[cust_col, date_col])
+    d = df[[cust_col, date_col, metric]].dropna(subset=[cust_col, date_col]).copy()
+    if not pd.api.types.is_datetime64_any_dtype(d[date_col]):
+        d[date_col] = pd.to_datetime(d[date_col], errors="coerce", format="mixed")
+        d = d.dropna(subset=[date_col])
     d[metric] = _num(d[metric])
     d = d[d[metric] > 0]
     if d.empty or d[cust_col].nunique() < 10:

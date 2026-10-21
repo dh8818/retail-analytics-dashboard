@@ -1,10 +1,29 @@
 /* 商务风格 UI —— 配色/字体来自 style.py，用 __TOKEN__ 占位替换 */
-header[data-testid="stHeader"] { display: none !important; height: 0 !important; }
-div[data-testid="stToolbar"] { display: none !important; }
+/* 顶栏保持可见但透明：手机端的「☰ 侧栏」开关就挂在 header 里，
+   整条隐藏会导致移动端永远打不开侧栏（桌面端可用快捷键，手机没有替代入口） */
+header[data-testid="stHeader"] {
+  display: block !important;
+  background: transparent !important;
+  height: auto !important;
+  min-height: 2.4rem;
+}
+header[data-testid="stHeader"] > div { background: transparent !important; }
+/* 工具栏整体不能隐藏：侧栏展开按钮就长在 stToolbar 里，隐藏后手机端永远进不去侧栏。
+   只藏 Deploy / 主菜单 / 运行状态这几个用不上的控件 */
+div[data-testid="stToolbar"] { display: flex !important; }
+div[data-testid="stToolbar"] [data-testid="stAppDeployButton"],
+div[data-testid="stToolbar"] [data-testid="stMainMenu"],
+div[data-testid="stToolbar"] [data-testid="stStatusWidget"] { display: none !important; }
 div[data-testid="stDecoration"] { display: none !important; }
 #MainMenu, footer { visibility: hidden; }
+/* 侧栏收起时左上角的展开按钮，必须可点 */
+[data-testid="stSidebarCollapsedControl"], [data-testid="stSidebarCollapseButton"] {
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1000;
+}
 
-.block-container { padding: 1.3rem 2.0rem 3rem !important; max-width: 1520px; }
+.block-container { padding: 2.4rem 2.0rem 3rem !important; max-width: 1520px; }
 .stApp { background: __PAGE_BG__; }
 html, body, [class*="css"] { font-family: __FONT__; color: __TEXT__; }
 

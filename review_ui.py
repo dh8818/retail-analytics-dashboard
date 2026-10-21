@@ -11,6 +11,15 @@ _COLS = ["日期", "问题", "采取的动作", "负责人", "预期效果", "�
 _STATUS = ["待开始", "进行中", "已完成", "已放弃"]
 
 
+def _nonempty(df):
+    """data_editor 新增的空行是空字符串，不是 NaN，dropna 抓不到。"""
+    d = df.copy()
+    for c in d.columns:
+        d[c] = d[c].astype("object").where(d[c].notna(), "")
+        d[c] = d[c].apply(lambda v: v.strip() if isinstance(v, str) else v)
+    return d.replace("", pd.NA).dropna(how="all")
+
+
 def _store():
     if "_actions" not in st.session_state:
         st.session_state["_actions"] = pd.DataFrame(columns=_COLS)
@@ -53,8 +62,9 @@ def render(adv_list):
                                     "状态": st.column_config.SelectboxColumn(options=_STATUS),
                                     "日期": st.column_config.TextColumn(help="YYYY-MM-DD"),
                                 }, key="rv_editor_empty")
-        if edited.dropna(how="all").shape[0]:
-            st.session_state["_actions"] = edited.dropna(how="all").fillna("")
+        _filled = _nonempty(edited)
+        if len(_filled):
+            st.session_state["_actions"] = _filled.fillna("")
             st.rerun()
         return
 
@@ -65,6 +75,7 @@ def render(adv_list):
                                 "采取的动作": st.column_config.TextColumn(width="large"),
                                 "实际结果": st.column_config.TextColumn(width="large"),
                             })
+    edited = _nonempty(edited).reset_index(drop=True)      # 丢掉空行，只留真实行动
     if not edited.equals(cur):
         st.session_state["_actions"] = edited.fillna("")
 
@@ -85,5 +96,5 @@ def render(adv_list):
 - **归因**：期间的促销、天气、缺货要一起写，否则无法判断是不是动作起了作用
         """)
     st.download_button("导出行动清单 CSV",
-                       edited.to_csv(index=False).encode("utf-8-sig"),
+                       _nonempty(edited).to_csv(index=False).encode("utf-8-sig"),
                        file_name="经营行动清单.csv", mime="text/csv", key="rv_dl")

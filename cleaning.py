@@ -42,7 +42,7 @@ def _as_date_ratio(s):
         return 0.0
     txt = v.astype(str).str.strip()
     # 必须先有「年」才算日期：否则 12:30:05 这种时间列会被 pandas 当成今天的日期
-    has_year = txt.str.contains(r"(19|20)\d{2}", regex=True)
+    has_year = txt.str.contains(r"(?:19|20)\d{2}", regex=True)
     if has_year.mean() < 0.5:
         return 0.0
     try:
@@ -103,6 +103,7 @@ def detect(df):
 
     num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     outliers = {}
+    outliers, longtail = {}, {}
     for c in num_cols:
         x = _num(df[c]).dropna()
         if len(x) < 20:
@@ -112,9 +113,18 @@ def detect(df):
         if mad == 0:
             continue
         z = 0.6745 * (x - med) / mad
-        k = int((z.abs() > 3.5).sum())
-        if k:
+        mask = z.abs() > 3.5
+        k = int(mask.sum())
+        # 超过 5% 的样本被判离群 → 这是长尾（金额、单价天然右偏），不是脏数据
+        if k and k / max(len(x), 1) <= 0.05:
             outliers[c] = k
+        elif k:
+            longtail[c] = k
+    if longtail:
+        out.append({"级别": "低", "问题": "长尾分布（右偏，不必删）",
+                    "定位": "、".join(f"{c}({v})" for c, v in list(longtail.items())[:6]),
+                    "数量": int(sum(longtail.values())),
+                    "建议": "金额/单价天然右偏，多数是真实大单；要删请先确认具体订单"})
     if outliers:
         out.append({"级别": "中", "问题": "疑似异常值（偏离中位数太远）",
                     "定位": "、".join(f"{c}({v})" for c, v in list(outliers.items())[:6]),
@@ -230,6 +240,7 @@ def clean(df, opts):
     if opts.get("drop_outliers", False):
         thr = float(opts.get("mad_k", 3.5))
         total = 0
+        skipped = []
         for c in [c for c in d.columns if pd.api.types.is_numeric_dtype(d[c])]:
             x = _num(d[c])
             med = x.median()
@@ -237,13 +248,20 @@ def clean(df, opts):
             if not np.isfinite(mad) or mad == 0:
                 continue
             z = 0.6745 * (x - med) / mad
+            if float((z.abs() > thr).mean()) > 0.05:
+                skipped.append(c)
+                continue
             mask = z.abs() > thr
             k = int(mask.sum())
             if k:
                 d = d[~mask]
                 total += k
         if total:
-            log.append({"动作": f"剔除异常值（MAD>{thr}）", "影响": f"{total} 行", "说明": "极端偏离的记录被移除，注意这会影响总额"})
+            log.append({"动作": f"剔除异常值（MAD>{thr}）", "影响": f"{total} 行",
+                        "说明": "极端偏离的记录被移除，注意这会影响总额"})
+        if skipped:
+            log.append({"动作": "跳过长尾列", "影响": "、".join(skipped[:6]),
+                        "说明": "这些列超过 5% 的行被判离群，属右偏分布，删了会误伤真实大单"})
 
     after = {"行数": len(d), "列数": len(d.columns),
              "缺失单元格": int(d.isna().sum().sum()),

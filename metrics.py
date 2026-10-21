@@ -5,9 +5,11 @@
 - 默认公式按实际列名生成（金额列叫「销售额」就写 sum(销售额)）
 - 公式里可以用 [指标名] 引用别的指标，例如 毛利率 = [毛利] / [销售收入]
 - 支持 sum( 进货价 * 数量 ) 这种「两列相乘再求和」
-- 用户改过的公式存 metric_formulas.json，重启还在
+- 用户改过的公式默认只存在「当前浏览器会话」里（不写服务器磁盘、不跨访客共享）；
+  本地单人使用时设 DASH_PERSIST_FORMULAS=1 才会写 metric_formulas.json
 """
 import json
+import os
 from pathlib import Path
 
 import custom_metrics as CM
@@ -103,7 +105,14 @@ def load_overrides(path):
         return {}
 
 
+def persist_enabled():
+    """只有本地单机场景才落盘；云端多人访问时写文件=把口径共享给陌生访客。"""
+    return os.environ.get("DASH_PERSIST_FORMULAS") == "1"
+
+
 def save_overrides(path, formulas):
+    if not persist_enabled():
+        return False
     try:
         Path(path).write_text(json.dumps(formulas, ensure_ascii=False, indent=2), encoding="utf-8")
         return True

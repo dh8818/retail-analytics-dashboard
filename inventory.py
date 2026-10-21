@@ -129,6 +129,7 @@ def build_snapshot(df, sku_col, date_col, qty_col, name_col=None, cat_col=None,
                 "销量": round(sold, 2), "到货": arriving, "报损": round(loss, 2),
                 "期末库存": on_hand(), "在途": round(in_transit, 2), "库存位置": position,
                 "缺货": stockout, "订货量": order, "交货周期": lead, "保质期": shelf,
+                "覆盖天数": cover,
                 "单位成本": m["cost"], "日均销量": round(avg, 2),
             })
 
@@ -144,23 +145,32 @@ def sku_summary(snap):
         库存位置=("库存位置", "last"), 缺货天数=("缺货", "sum"), 天数=("日期", "count"),
         日均销量=("日均销量", "last"), 交货周期=("交货周期", "last"),
         保质期=("保质期", "last"), 单位成本=("单位成本", "last"),
-        建议订货=("订货量", "last"))
+        覆盖天数=("覆盖天数", "last"), 建议订货=("订货量", "last"))
     g["平均库存"] = snap.groupby("商品编码")["期末库存"].mean().reindex(g["商品编码"]).to_numpy()
     safe = g["日均销量"].replace(0, np.nan)
     g["周转天数"] = (g["平均库存"] / safe).round(1)
     g["缺货率%"] = (g["缺货天数"] / g["天数"].replace(0, np.nan) * 100).round(1)
     g["报损率%"] = (g["报损"] / g["销量"].replace(0, np.nan) * 100).round(1)
     g["库存金额"] = (g["期末库存"] * g["单位成本"]).round(2)
-    # 建议订货再按最新库存位置复核一次，保证公式可核对
-    target = g["日均销量"] * 5 + g["日均销量"] * g["交货周期"] * 0.5
-    g["建议订货"] = (target - g["库存位置"]).clip(lower=0).round(1)
+    # 建议订货再按最新库存位置复核一次，保证公式可核对：
+    # 目标库存 = 日均 × 该 SKU 覆盖天数 + 交期需求；鲜食再按保质期封顶
+    cover = (g["覆盖天数"].fillna(5) if "覆盖天数" in g
+             else pd.Series(5.0, index=g.index))
+    target = g["日均销量"] * cover + g["日均销量"] * g["交货周期"] * 0.5
+    order = (target - g["库存位置"]).clip(lower=0)
+    fresh = g["保质期"] <= 3
+    if fresh.any():
+        cap = g["日均销量"] * g["保质期"] * 0.8
+        order = order.mask(fresh, np.minimum(order, cap))
+    g["建议订货"] = order.round(1)
     return g.sort_values(["缺货率%", "周转天数"], ascending=False)
 
 
 def reorder_explain(row):
     """把一只 SKU 的订货计算摊开成文字。"""
-    target = round(row["日均销量"] * 5 + row["日均销量"] * row["交货周期"] * 0.5, 1)
-    return (f"日均销量 {row['日均销量']:.1f} × 覆盖 5 天 + 交期 {row['日均销量']*row['交货周期']*0.5:.1f}"
+    _cover = int(row.get("覆盖天数", 5) or 5)
+    target = round(row["日均销量"] * _cover + row["日均销量"] * row["交货周期"] * 0.5, 1)
+    return (f"日均销量 {row['日均销量']:.1f} × 覆盖 {_cover} 天 + 交期 {row['日均销量']*row['交货周期']*0.5:.1f}"
             f" = 目标库存 {target:.1f}；现有库存位置 {row['库存位置']:.1f}"
             f"（期末 {row['期末库存']:.1f} + 在途 {row['在途']:.1f}）；"
             f"建议订货 {row['建议订货']:.1f}" + (f"（保质期 {row['保质期']} 天，不能多订）" if row["保质期"] <= 3 else ""))
