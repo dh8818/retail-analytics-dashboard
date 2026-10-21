@@ -265,6 +265,32 @@ check("缺成本时毛利为空", 1 if _vnc["毛利"] is None else 0, 1)
 _o, _e = SQ.run_sql(df, "SELECT * FROM read_csv('C:/Windows/win.ini')")
 check("SQL 不能读服务器文件", 1 if _o is None and _e else 0, 1)
 
+print("\n== 库存与订货 ==")
+import inventory as INV
+_sdf = pd.read_csv("data/pos.csv", encoding="utf-8-sig").head(20000)
+_snap, _meta = INV.build_snapshot(_sdf, "SKU", "日期", "数量", "名称", "品类", "成本")
+check("快照行数=SKU×天数", len(_snap), _snap["商品编码"].nunique() * _snap["日期"].nunique())
+check("期末库存不为负", 1 if (_snap["期末库存"] >= 0).all() else 0, 1)
+check("报损不为负", 1 if (_snap["报损"] >= 0).all() else 0, 1)
+_g = INV.sku_summary(_snap)
+check("报损率不超过 100%", 1 if _g["报损率%"].max() < 100 else 0, 1)
+_row = _g.iloc[0]
+_target = _row["日均销量"] * 5 + _row["日均销量"] * _row["交货周期"] * 0.5
+check("订货量公式可复算", max(0.0, round(_target - _row["库存位置"], 1)),
+      round(float(_row["建议订货"]), 1), 1e-6)
+_k = INV.health_kpis(_g)
+check("缺货率在 0-100 之间", 1 if 0 <= _k["缺货率%"] <= 100 else 0, 1)
+check("鲜食保质期短于饮料", 1 if (_g[_g["品类"] == "鲜食"]["保质期"].max()
+                                < _g[_g["品类"] == "饮料"]["保质期"].min()) else 0, 1)
+
+print("\n== 行动复盘 ==")
+import review_ui as RVU
+_acts = RVU.from_advice(_adv_for_test) if False else None
+_adv_demo = [{"title": "收紧折扣", "action": "只对临期打折", "impact": "让利降到 0.5%"}]
+_acts = RVU.from_advice(_adv_demo)
+check("生成一条行动项", len(_acts), 1)
+check("行动项含状态列", 1 if "状态" in _acts.columns else 0, 1)
+
 print("\n== 目标达成 ==")
 tp = AN.target_progress(pd.Series([10.0, 20.0, 30.0]), 100, elapsed=0.5)
 check("达成率%", tp["rate"], 30.0)

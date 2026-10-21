@@ -31,6 +31,8 @@ import nlq
 import perf
 import timefix
 import privacy_ui as PV
+import inventory_ui as IVU
+import review_ui as RVU
 import cleaning_ui as CU
 import cleaning as CL
 import advanced_ui as AU
@@ -1336,6 +1338,19 @@ perf.set_sig(f"{_DF_SIG}|clean={int(_clean_on)}|rows={len(df)}")
 # ---------- 核心四指标（单独一行） ----------
 _qty_c0 = next((c for c in num_cols
                 if c != metric and any(h in str(c).lower() for h in ("数量", "销量", "件数", "qty", "quantity"))), None)
+_sku_c0 = next((c for c in df.columns if str(c) in ("商品编码", "SKU", "sku", "货号", "条码")
+                 or any(h in str(c) for h in ("商品编码", "货号", "条码", "SKU"))), None)
+# 同名不同 ID：两个 SKU 叫同一个名字时，按名称聚合会被合并，这里换成「名称 (编码)」做键
+if detail and _sku_c0 and detail in df.columns and _sku_c0 in df.columns:
+    try:
+        _name_conflict = int((df.groupby(detail)[_sku_c0].nunique() > 1).sum())
+        if _name_conflict:
+            df["__明细键__"] = (df[detail].astype(str) + " (" + df[_sku_c0].astype(str) + ")")
+            kinds["__明细键__"] = "cat"
+            detail = "__明细键__"
+    except Exception:
+        pass
+
 _cost_c0 = next((c for c in num_cols
                  if any(h in str(c).lower() for h in ("成本", "进价", "cost", "进货"))), None)
 
@@ -1430,6 +1445,9 @@ sums = perf.get("sums:" + _k, lambda: business_summary(df, kinds, metric, dc, bi
 health = perf.get("health:" + _k, lambda: data_health(df, dc, metric, num_cols, refund_info,
                                                      join_conflicts, sampled_from))
 ins = perf.get("ins:" + _k, lambda: make_insights(df, kinds, metric, dc, big, detail))
+_adv = perf.get(f"advice:{metric}:{_qty_c0}:{_cost_c0}:{dc}:{detail}:{big}:{_oc0}:{target_amount}:{len(df)}",
+                lambda: ADV.build_advice(df, metric, _qty_c0, _cost_c0, _cost_force, dc,
+                                         detail or big, big, _oc0, float(target_amount or 0)))
 oc = AN.pick_order_col(df)
 cust_col = AN.find_col(df.columns, AN.CUST_HINT)
 cost_c = AN.find_col(df.columns, AN.COST_HINT, exclude={metric})
@@ -1588,7 +1606,7 @@ if _lead:
     st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
 
 # 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
-_SECTIONS = ["概览", "数据清洗", "趋势", "结构", "经营", "客户与归因", "SQL 查询", "统计建模", "数据与口径"]
+_SECTIONS = ["概览", "数据清洗", "趋势", "结构", "经营", "库存订货", "客户与归因", "行动复盘", "SQL 查询", "统计建模", "数据与口径"]
 try:
     _sec = st.segmented_control("模块", _SECTIONS, default=_SECTIONS[0],
                                 key="sec_pick", label_visibility="collapsed")
@@ -1610,9 +1628,6 @@ if _sec == "概览":
                     st.markdown(
                         f"<div class='sumcard'><div class='sumhead'>{it['icon']} {it['title']}</div>"
                         f"<div class='sumtext'>{it['text']}</div></div>", unsafe_allow_html=True)
-    _adv = perf.get(f"advice:{metric}:{qty_c}:{_cost_c0}:{dc}:{detail}:{big}:{oc}:{target_amount}:{len(df)}",
-                    lambda: ADV.build_advice(df, metric, qty_c, _cost_c0, _cost_force, dc,
-                                             detail or big, big, oc, float(target_amount or 0)))
     if _adv:
         st.markdown("<div class='sect'>改善建议<small>按你这份数据算的，每条都带依据；预期是粗估，不是承诺</small></div>",
                     unsafe_allow_html=True)
@@ -1765,6 +1780,9 @@ if _sec == "经营":
         chart_card(chart_corr(df, num_cols), "corr", 340)
 
 # ---------------- 客户与归因 ----------------
+if _sec == "库存订货":
+    IVU.render(df, _sku_c0, dc, qty_c, detail, big, _cost_c0)
+
 if _sec == "客户与归因":
     if cust_col and dc and metric:
         XS.section_rfm(df, cust_col, dc, metric, chart_card)
@@ -1775,6 +1793,9 @@ if _sec == "客户与归因":
         XS.section_compare(df, dc, metric, cat_cols, chart_card)
 
 # ---------------- 数据与口径 ----------------
+if _sec == "行动复盘":
+    RVU.render(_adv)
+
 if _sec == "SQL 查询":
     _nlq_schema = nlq.build_schema(df, metric=metric, qty=qty_c, date=dc,
                                    cost=cost_c, cat=big, item=detail)
