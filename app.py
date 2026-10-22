@@ -26,6 +26,7 @@ import extra_sections as XS
 import custom_metrics as CM
 import metrics as MT
 import advice as ADV
+import export_pack as EPK
 import sql_console as SQ
 import nlq
 import perf
@@ -1974,6 +1975,30 @@ if _sec == "数据与口径":
                 file_name=f"经营分析报告_{datetime.now():%Y%m%d_%H%M}.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 key="dl_ppt")
+
+    with st.expander("交给专业分析师：导出完整分析包（ZIP）"):
+        st.caption("把数据、口径、结论、图表和「还缺什么」打包成一个 zip。"
+                   "店主拿着它找外部顾问或分析师时，对方不用再问一遍每个数怎么来的。")
+        _pk_mask = st.checkbox("去掉手机号、姓名、地址等个人信息列", value=True, key="pack_mask")
+        if st.button("生成分析包", key="mk_pack"):
+            with st.spinner("正在打包…"):
+                try:
+                    _rows = [{"指标": _k, "数值": MV.get(_k), "公式": _FM_DEFAULT.get(_k, ""),
+                              "说明": "见页面口径字典"} for _k in list(MV.keys())] if MV else []
+                    st.session_state["_pack_bytes"] = EPK.build_pack(
+                        df, metric=metric, qty_col=qty_c, cost_col=cost_c, cost_force=_cost_force,
+                        date_col=dc, item_col=detail, big_col=big, order_col=oc,
+                        target=float(target_amount or 0), metric_rows=_rows,
+                        issues=perf.get("clean_issues", lambda: CL.detect(_RAW_DF)),
+                        mask=_pk_mask)
+                except Exception as _e:
+                    st.error(f"打包失败：{type(_e).__name__}: {_e}")
+        if st.session_state.get("_pack_bytes"):
+            _mb = len(st.session_state["_pack_bytes"]) / 1024 / 1024
+            st.download_button(
+                f"⬇ 下载分析包（{_mb:.1f} MB）", st.session_state["_pack_bytes"],
+                file_name=f"经营分析包_{datetime.now():%Y%m%d_%H%M}.zip",
+                mime="application/zip", key="dl_pack")
 
     with st.expander("导出 Excel（多工作表）"):
         st.caption("包含：核心指标、数据体检、业务总结、数据明细（前 5000 行）。")
