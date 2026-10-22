@@ -647,8 +647,10 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
             ("连带率", "数量合计 ÷ 订单数", "反映一单买几件"),
             ("环比 / 同比", "本期 ÷ 上一期（或去年同期）", "本期未走完时按日均比"),
             ("预测", "移动平均 + 趋势 + 星期季节性", "只适合短期，别外推半年")]
+    _avail = 4.55                                   # 1.5 到 6.05 之间的可用高度（英寸）
+    _row_h = min(0.42, _avail / max(len(rows), 1))
     tbl = s.shapes.add_table(len(rows), 3, Inches(0.6), Inches(1.5),
-                             Inches(W - 1.2), Inches(0.42 * len(rows))).table
+                             Inches(W - 1.2), Inches(_row_h * len(rows))).table
     tbl.columns[0].width = Inches(2.2)
     tbl.columns[1].width = Inches(5.4)
     tbl.columns[2].width = Inches(4.5)
@@ -667,11 +669,10 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
             cell.fill.solid()
             cell.fill.fore_color.rgb = NAVY if r == 0 else (WHITE if r % 2 else RGBColor(0xF7, 0xF9, 0xFC))
 
-    q = [f"数据行数：{len(df):,}", f"时间范围：{span or '—'}",
-         f"字段数：{len(df.columns)}", f"重复行：{int(df.duplicated().sum()):,}"]
-    _text(s, 0.6, 5.35, 12.1, 0.3, "数据质量", size=12, bold=True, color=NAVY)
-    _text(s, 0.6, 5.7, 12.1, 0.9, "　｜　".join(q), size=10, color=GRAY)
-    _footer(s, page)
+    # 注意：这里不要再放「数据质量」段落——它已经有单独一页，
+    # 而且会和表格最后几行叠在一起（表格高度随行数变化）
+    _footer(s, page, note=f"数据来源：本次上传的销售明细（{len(df):,} 行，{span or '时间未识别'}）"
+                          f"　｜　口径与页面显示完全一致，可直接用于对数")
 
     buf = io.BytesIO()
     prs.save(buf)

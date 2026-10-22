@@ -37,6 +37,7 @@ import review_ui as RVU
 import cleaning_ui as CU
 import cleaning as CL
 import advanced_ui as AU
+import simple_ui as SUI
 # matplotlib / python-pptx 很重（约 200MB 内存、1 秒导入），
 # 只在真的要导出 PPT 时才加载，云端实例内存小，这点很关键
 PE = None
@@ -811,12 +812,6 @@ def make_insights(df, kinds, metric, dc, cat, detail):
 # ============================================================
 # 页面
 # ============================================================
-st.markdown(
-    "<div style='display:flex;align-items:baseline;gap:14px;flex-wrap:wrap'>"
-    f"<div style='font-size:23px;font-weight:600;color:{BI_NAVY};letter-spacing:.4px'>智能数据分析</div>"
-    f"<div style='font-size:12.5px;color:{MUTED}'>上传 Excel / CSV → 自动识别结构 → 多维分析</div></div>"
-    f"<div style='height:2px;background:{BI_NAVY};width:44px;margin:8px 0 10px'></div>",
-    unsafe_allow_html=True)
 PV.badge()
 
 with st.sidebar:
@@ -1477,6 +1472,79 @@ def _fm_custom(name, default_sub):
     return "自定义公式" if (_fm_cur.get(name) or "").strip() != (_FM_DEFAULT.get(name) or "").strip() else default_sub
 
 
+_VIEW = st.radio(
+    "看什么", ["老板视角（简单）", "专业分析（完整）"], horizontal=True,
+    key="view_mode", label_visibility="collapsed",
+    help="老板视角只回答「赚没赚、漏在哪、改什么」；专业分析是完整的 11 个模块。")
+
+if _VIEW.startswith("老板"):
+    # 这一段跑在专业分析之前，所以需要的列和建议就地算，别依赖后面才定义的变量
+    _qty_b = AN.find_col(df.columns, AN.QTY_HINT, exclude={metric})
+    _cost_b = AN.find_col(df.columns, AN.COST_HINT, exclude={metric})
+    _oc_b = AN.pick_order_col(df)
+    _adv_b = perf.get(
+        f"advice:{metric}:{_qty_b}:{_cost_b}:{dc}:{detail}:{big}:{_oc_b}:{target_amount}:{len(df)}",
+        lambda: ADV.build_advice(df, metric, _qty_b, _cost_b, _cost_force, dc,
+                                 detail, big, _oc_b, float(target_amount or 0)))
+    SUI.render(df, metric=metric, date_col=dc, big_col=big, detail_col=detail,
+               qty_col=_qty_b, cost_col=_cost_b, sales=_sales, profit=_profit,
+               margin=_margin, advice_list=_adv_b, order_col=_oc_b,
+               cost_force=_cost_force)
+    st.stop()
+
+st.markdown(
+    "<div style='display:flex;align-items:baseline;gap:14px;flex-wrap:wrap'>"
+    f"<div style='font-size:23px;font-weight:600;color:{BI_NAVY};letter-spacing:.4px'>智能数据分析</div>"
+    f"<div style='font-size:12.5px;color:{MUTED}'>上传 Excel / CSV → 自动识别结构 → 多维分析</div></div>"
+    f"<div style='height:2px;background:{BI_NAVY};width:44px;margin:8px 0 10px'></div>",
+    unsafe_allow_html=True)
+
+# ---------- 当前口径条 + 顶部字典 ----------
+_caliber_bits = [
+    f"收入＝{'净额（含退款）' if refund_mode == '计入' else '毛销售（剔除退款）'}",
+    f"订单数＝{order_key_mode}",
+    f"连带率＝{tie_mode}",
+    f"客单价＝{aov_mode}",
+    f"成本＝{cost_force}",
+]
+st.markdown(
+    "<div class='caliber'><span>" + " ｜ ".join(_caliber_bits) + "</span>"
+    "<span class='caliber-hint'>在左侧「口径设置」里改，全页跟着变</span></div>",
+    unsafe_allow_html=True)
+
+if dict_at_top:
+    with st.expander("📖 指标口径字典｜每个数字是怎么算出来的", expanded=False):
+        render_metric_dict(metric, qty_c, cost_c, oc, dc, refund_mode, gran,
+                           order_key_mode, tie_mode, aov_mode, cost_force, with_editor=False)
+
+
+# ============================================================
+# 分页
+# ============================================================
+# ---------- 本期要点（一句话结论，汇报时直接念） ----------
+_issues_n = 0
+_issues = []
+if not (_clean_state and _clean_state.get("sig") == _DF_SIG):
+    _issues = perf.get("clean_issues", lambda: CL.detect(_RAW_DF))
+    _issues_n = len(_issues)
+if _issues_n:
+    _names = "、".join(i["问题"] for i in _issues[:3])
+    if _issues_n > 3:
+        _names += " 等"
+    st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
+                f"检测到 <b>{_issues_n} 类</b>数据问题：{_names}，"
+                f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
+
+_lead = ""
+if sums:
+    _lead = str(sums[0].get("text", ""))
+elif ins:
+    _lead = str(ins[0])
+if _lead:
+    _lead = re.sub(r"\*\*(.+?)\*\*", r"<b></b>", _lead)
+    st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
+
+# 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
 _hero = [
     ("销售收入", fmt(_sales), _fm_custom("销售收入", "净额（含退款）" if refund_mode == "计入" else "毛销售（已剔除退款）"), BI_NAVY),
     ("毛利", fmt(_profit) if _profit is not None else "—",
@@ -1632,52 +1700,6 @@ def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
                          width="stretch", hide_index=True)
 
 
-# ---------- 当前口径条 + 顶部字典 ----------
-_caliber_bits = [
-    f"收入＝{'净额（含退款）' if refund_mode == '计入' else '毛销售（剔除退款）'}",
-    f"订单数＝{order_key_mode}",
-    f"连带率＝{tie_mode}",
-    f"客单价＝{aov_mode}",
-    f"成本＝{cost_force}",
-]
-st.markdown(
-    "<div class='caliber'><span>" + " ｜ ".join(_caliber_bits) + "</span>"
-    "<span class='caliber-hint'>在左侧「口径设置」里改，全页跟着变</span></div>",
-    unsafe_allow_html=True)
-
-if dict_at_top:
-    with st.expander("📖 指标口径字典｜每个数字是怎么算出来的", expanded=False):
-        render_metric_dict(metric, qty_c, cost_c, oc, dc, refund_mode, gran,
-                           order_key_mode, tie_mode, aov_mode, cost_force, with_editor=False)
-
-
-# ============================================================
-# 分页
-# ============================================================
-# ---------- 本期要点（一句话结论，汇报时直接念） ----------
-_issues_n = 0
-_issues = []
-if not (_clean_state and _clean_state.get("sig") == _DF_SIG):
-    _issues = perf.get("clean_issues", lambda: CL.detect(_RAW_DF))
-    _issues_n = len(_issues)
-if _issues_n:
-    _names = "、".join(i["问题"] for i in _issues[:3])
-    if _issues_n > 3:
-        _names += " 等"
-    st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
-                f"检测到 <b>{_issues_n} 类</b>数据问题：{_names}，"
-                f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
-
-_lead = ""
-if sums:
-    _lead = str(sums[0].get("text", ""))
-elif ins:
-    _lead = str(ins[0])
-if _lead:
-    _lead = re.sub(r"\*\*(.+?)\*\*", r"<b></b>", _lead)
-    st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
-
-# 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
 _SECTIONS = ["数据清洗", "概览", "趋势", "结构", "经营", "库存订货", "客户与归因",
              "行动复盘", "统计建模", "SQL 查询", "数据与口径"]
 try:
