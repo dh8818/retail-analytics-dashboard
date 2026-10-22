@@ -173,8 +173,7 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
                 + (f"<br><span style='color:{MUTED};font-size:13px'>{drop_txt}</span>" if drop_txt else "")
                 + "</div>", unsafe_allow_html=True)
 
-    # 四个大数字（用大白话当标签）
-    cols = st.columns(4)
+    # 四个大数字：宽屏 4 列、手机 2 列（用 CSS 网格，不靠 Streamlit 的列）
     cards = [
         ("卖了多少钱", _money(cur_rev), f"近 {per['days']} 天"),
         ("赚了多少（毛利）", _money(profit) if profit is not None else "算不了",
@@ -182,12 +181,34 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
         ("每卖 100 块赚", _pct(margin) if margin is not None else "—", "毛利率"),
         ("平均每单", _money(aov), f"共 {orders:,} 单" if orders else ""),
     ]
-    for c, (lab, val, sub) in zip(cols, cards):
-        with c:
-            st.markdown(
-                f"<div class='kpi'><div class='kpi-label'>{lab}</div>"
-                f"<div class='kpi-value'>{val}</div>"
-                f"<div class='kpi-sub'>{sub}</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<style>.kpi4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 4px}"
+        "@media (max-width:820px){.kpi4{grid-template-columns:repeat(2,1fr);gap:8px}}"
+        "@media (max-width:360px){.kpi4{grid-template-columns:1fr}}"
+        "</style>"
+        "<div class='kpi4'>"
+        + "".join(
+            f"<div class='kpi' style='margin:0'><div class='kpi-label'>{lab}</div>"
+            f"<div class='kpi-value'>{val}</div>"
+            f"<div class='kpi-sub'>{sub}</div></div>"
+            for lab, val, sub in cards)
+        + "</div>", unsafe_allow_html=True)
+
+    # 每天卖多少：一张图看懂走势（轻量原生图，手机不卡）
+    if metric in cur.columns:
+        _d = cur.dropna(subset=[date_col])
+        _daily = _d.groupby(_d[date_col].dt.date)[metric].sum()
+        if len(_daily) >= 3:
+            st.markdown("<div class='sect'>这段时间每天卖多少<small>柱子高＝那天卖得多</small></div>",
+                        unsafe_allow_html=True)
+            _ser = pd.Series(_daily.values, index=[str(d)[5:] for d in _daily.index],
+                             name="每天销售额")   # 用 10-01 这种短标签，避免英文月份
+            st.bar_chart(_ser, height=210, color="#118DFF")
+            _best = _daily.idxmax()
+            _worst = _daily.idxmin()
+            st.caption(f"最好的一天是 {str(_best)}（{_money(float(_daily.max()))}），"
+                       f"最差是 {str(_worst)}（{_money(float(_daily.min()))}）。"
+                       + ("跌幅明显的那几天，先排除是不是缺货/下雨/停业。" if _daily.min() < _daily.mean() * 0.5 else ""))
 
     left, right = st.columns([1, 1])
     with left:

@@ -1079,18 +1079,21 @@ if metric:
         df = df[~neg_mask].copy()
 
 # ---------- 顶部信息 ----------
+_IS_BOSS_EARLY = str(st.session_state.get("view_mode", "老板视角（简单）")).startswith("老板")
 st.markdown(
+    "" if _IS_BOSS_EARLY else
     f"<div style='font-size:12.5px;color:{MUTED};margin-bottom:6px'>"
     f"文件：{up_name} ｜ 主表：{sheet} ｜ {len(df):,} 行 × {df.shape[1]} 列 ｜ "
     f"识别出 {len(date_cols)} 个时间列、{len(num_cols)} 个数值列、{len(cat_cols)} 个类别列"
     + (f"、地理列「{geo}」" if geo else "") + "</div>", unsafe_allow_html=True)
-if joined_note:
+if joined_note and not _IS_BOSS_EARLY:
     st.markdown(f"<div style='font-size:12px;color:#107C10;margin-bottom:6px'>🔗 已关联："
                 + "；".join(joined_note) + "</div>", unsafe_allow_html=True)
 if dc:
     yrs = df[dc].dt.year.nunique()
     qs = df[dc].dt.to_period("Q").nunique()
     st.markdown(
+        "" if _IS_BOSS_EARLY else
         f"<div style='font-size:12px;color:{MUTED};margin-bottom:8px'>"
         f"时间跨度：{df[dc].min():%Y-%m-%d} ~ {df[dc].max():%Y-%m-%d} ｜ 覆盖 {yrs} 个年度、{qs} 个季度"
         f"</div>", unsafe_allow_html=True)
