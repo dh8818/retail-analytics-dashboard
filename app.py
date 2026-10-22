@@ -36,7 +36,19 @@ import inventory_ui as IVU
 import review_ui as RVU
 import cleaning_ui as CU
 import cleaning as CL
-import advanced_ui as AU
+AU = None
+
+
+def _au():
+    global AU
+    if AU is None:
+        try:
+            import advanced_ui as _mod
+            AU = _mod
+        except Exception:
+            AU = False
+    return AU or None
+
 import simple_ui as SUI
 # matplotlib / python-pptx 很重（约 200MB 内存、1 秒导入），
 # 只在真的要导出 PPT 时才加载，云端实例内存小，这点很关键
@@ -58,6 +70,110 @@ MT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metric_formu
 
 from style import (BI_BLUE, BI_NAVY, PALETTE, CARD_BG, PAGE_BG, TEXT, MUTED, GRID,
                    FONT, fmt, fig_base, MODEBAR)
+
+
+def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
+                       order_key="自动（推荐）", tie="按件数（数量合计）",
+                       aov="仅正向订单（推荐）", cost_mode="自动判断（推荐）", *,
+                       with_editor=True, with_table=True):
+    """口径字典：所有公式都按当前选择动态生成，选了什么就显示什么。"""
+    if cost_mode.startswith("按单价"):
+        cost_formula = f"Σ({cost_c} × {qty_c or '数量'})"
+    elif cost_mode.startswith("按成本"):
+        cost_formula = f"Σ「{cost_c}」"
+    else:
+        cost_formula = (f"Σ({cost_c} × {qty_c or '数量'})" if cost_c and AN.cost_kind(cost_c) == "单价"
+                        else f"Σ「{cost_c}」" if cost_c else "—")
+    order_formula = {"自动（推荐）": "去重订单号（跨期重复时自动 +日期）",
+                     "订单号+日期": "去重 订单号+日期",
+                     "订单号原样": "去重订单号"}[order_key]
+    tie_formula = ("Σ数量 ÷ 订单数" if tie.startswith("按件数") else "明细行数 ÷ 订单数")
+    aov_note = ("只统计金额>0 的订单" if aov.startswith("仅正向") else "退款单也进分母，客单价会被拉低")
+
+    rows = [
+        ("销售收入", f"Σ「{metric}」", "全部行的金额求和",
+         "退款行（负金额）默认计入 → 净销售额；切成「剔除」就是毛销售额，两者能差几个点"),
+        ("销售数量", f"Σ「{qty_c}」" if qty_c else "无数量列，用行数", qty_c or "行数",
+         "和收入同口径；退货行的负数量会冲减"),
+        ("成本", cost_formula, cost_c or "无成本列",
+         f"当前口径：{cost_mode}。列名像单价要乘数量，像总额直接求和——这条最容易算错"),
+        ("毛利", "销售收入 − 成本", "上面两行", "不含人工、房租、平台佣金，是商品毛利不是净利"),
+        ("毛利率", "毛利 ÷ 销售收入", "毛利 / 收入", "低毛利靠走量的生意，别用毛利率做唯一考核"),
+        ("订单数", order_formula, order_col or "无订单号列",
+         f"当前口径：{order_key}。订单号跨期复用时不加日期，连带率会虚高"),
+        ("客单价", "Σ订单金额 ÷ 订单数", f"{metric} / 订单号", aov_note),
+        ("件单价", "Σ金额 ÷ Σ数量", f"{metric} / {qty_c or '数量'}", "反映每件商品卖多少钱"),
+        ("连带率", tie_formula, "数量 / 订单号", f"当前口径：{tie}"),
+        ("客单价中位数", "订单金额的中位数", f"{metric}", "抗极端大单，看「典型顾客」花多少"),
+        ("金额校验", "金额 vs 数量×单价", f"{metric} / {qty_c or '—'} / 单价", "不一致多半是折扣满减，也可能是错单"),
+        ("构成占比", "某维度金额 ÷ 总金额", f"{metric} / 维度列", "环形图、树图都用这个"),
+        ("毛利占比", "某维度毛利 ÷ 总毛利", "毛利 / 维度列", "和金额占比对比，能看出「谁真正赚钱」"),
+        ("帕累托累计", "按金额降序的累计占比", f"{metric}", "ABC 分层阈值 70% / 90%"),
+        ("支持度", "同时含 A、B 的订单 ÷ 总订单", "订单号 + 商品", "购物篮用的基础频次"),
+        ("置信度", "含 A 的订单里也含 B 的比例", "订单号 + 商品", "做套餐命中率估算"),
+        ("提升度", "置信度 ÷ B 的基础购买率", "订单号 + 商品", ">1 才有正的连带关系；只看置信度会误判畅销品"),
+        ("环比", f"本期 vs 上一个{gran}", dc or "—", "看短期波动，受促销和断档影响大"),
+        ("同比", "本期 vs 去年同期", dc or "—", "剔掉季节性，判断趋势真假用这个"),
+        ("RFM", "R 最近一次距今 / F 购买频次 / M 累计金额，各做五分位", "会员列 + 日期 + 金额",
+         "快照式分层，不反映「新客留存到第 3 个月还剩多少」"),
+        ("目标达成率", "本期实际 ÷ 目标", f"{metric}", "目标是整期口径，月中查看时结合按速度推算值"),
+        ("预测", "移动平均 + 阻尼趋势 + 星期季节性偏移", dc or "—",
+         "区间用残差标准差算，不是置信区间推导；只适合短期"),
+        ("异常点", "滚动中位数 + MAD（|z|>3.5）", dc or "—", "比 3σ 抗极端值；先排查缺货/系统故障再剔除"),
+    ]
+    if with_editor:
+        st.markdown("<div class='sect'>指标公式<small>全部可改，改完立即生效；图表仍按列聚合，不受影响</small></div>",
+                    unsafe_allow_html=True)
+        st.caption("写法：sum(列名) / nunique(列名) / sum(进价 * 数量)；也能用 [毛利] / [销售收入] 引用别的指标。"
+                   "改的是「指标数值」，图形还是用原始列画。")
+        for _m in MT.ORDER:
+            _c1, _c2, _c3 = st.columns([1.1, 3.0, 1.7])
+            _c1.markdown(f"<div style='padding-top:7px;font-weight:600;font-size:13px'>{_m}</div>",
+                         unsafe_allow_html=True)
+            _c2.text_input(_m, key=f"fm_{_m}", label_visibility="collapsed",
+                           placeholder=_FM_DEFAULT.get(_m) or "（无此指标）")
+            if MVERR.get(_m):
+                _c3.markdown(f"<div style='color:#D64550;font-size:12px;padding-top:9px'>⚠ {MVERR[_m][:38]}</div>",
+                             unsafe_allow_html=True)
+            else:
+                _c3.markdown(f"<div style='color:{MUTED};font-size:13px;padding-top:9px'>"
+                             f"= {MT.display(_m, MV.get(_m))}</div>", unsafe_allow_html=True)
+        _b1, _b2, _ = st.columns([1.1, 1.1, 2.2])
+        if _b1.button("💾 保存公式", key="fm_save"):
+            _fm_now = {k: st.session_state.get(f"fm_{k}", v) for k, v in _FM_DEFAULT.items()}
+            st.session_state["_fm_saved"] = _fm_now
+            if MT.save_overrides(MT_FILE, _fm_now):
+                st.success("已保存（本机模式：写入 metric_formulas.json）")
+            else:
+                st.success("已保存到当前浏览器会话：刷新还在；换人或换设备看到的是默认口径")
+        if _b2.button("↺ 恢复默认", key="fm_reset"):
+            st.session_state.pop("_fm_saved", None)
+            MT.save_overrides(MT_FILE, {})
+            # 只赋值没用（widget 自己的 state 会盖掉），要删 key 再重跑
+            for k in _FM_DEFAULT:
+                st.session_state.pop(f"fm_{k}", None)
+            st.session_state["_fm_sig"] = None
+            st.rerun()
+
+    if with_table:
+        head = "".join(f"<th>{h}</th>" for h in ["指标", "计算公式", "取数", "口径提醒"])
+        body = ""
+        for r in rows:
+            body += ("<tr>" + f"<td>{r[0]}</td><td class='mono'>{r[1]}</td>"
+                     f"<td>{r[2]}</td><td class='note'>{r[3]}</td>" + "</tr>")
+        st.markdown(f"<table class='mdict'><thead><tr>{head}</tr></thead>"
+                    f"<tbody>{body}</tbody></table>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='insight'>上面每一条都是本工具<b>当前实际执行</b>的逻辑，会随左侧「口径设置」变化。"
+            "跟财务/老板对数之前，先把这张表对一遍——口径不一致时，数字差多少都能解释得通。</div>",
+            unsafe_allow_html=True)
+    elif with_editor:
+        # 只把「不是指标、改不了」的算法口径放折叠里，避免和上面的可改公式重复
+        _algo = [r for r in rows if r[0] not in MT.ORDER]
+        with st.expander(f"其余算法口径（{len(_algo)} 条，不需要改，核对时看）"):
+            st.dataframe(pd.DataFrame(_algo, columns=["口径", "算法", "取数", "说明"]),
+                         width="stretch", hide_index=True)
+
 
 st.set_page_config(page_title="智能数据分析", layout="wide", page_icon="📊")
 
@@ -1515,39 +1631,13 @@ st.markdown(
     "<span class='caliber-hint'>在左侧「口径设置」里改，全页跟着变</span></div>",
     unsafe_allow_html=True)
 
-if dict_at_top:
-    with st.expander("📖 指标口径字典｜每个数字是怎么算出来的", expanded=False):
-        render_metric_dict(metric, qty_c, cost_c, oc, dc, refund_mode, gran,
-                           order_key_mode, tie_mode, aov_mode, cost_force, with_editor=False)
+
 
 
 # ============================================================
 # 分页
 # ============================================================
 # ---------- 本期要点（一句话结论，汇报时直接念） ----------
-_issues_n = 0
-_issues = []
-if not (_clean_state and _clean_state.get("sig") == _DF_SIG):
-    _issues = perf.get("clean_issues", lambda: CL.detect(_RAW_DF))
-    _issues_n = len(_issues)
-if _issues_n:
-    _names = "、".join(i["问题"] for i in _issues[:3])
-    if _issues_n > 3:
-        _names += " 等"
-    st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
-                f"检测到 <b>{_issues_n} 类</b>数据问题：{_names}，"
-                f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
-
-_lead = ""
-if sums:
-    _lead = str(sums[0].get("text", ""))
-elif ins:
-    _lead = str(ins[0])
-if _lead:
-    _lead = re.sub(r"\*\*(.+?)\*\*", r"<b></b>", _lead)
-    st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
-
-# 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
 _hero = [
     ("销售收入", fmt(_sales), _fm_custom("销售收入", "净额（含退款）" if refund_mode == "计入" else "毛销售（已剔除退款）"), BI_NAVY),
     ("毛利", fmt(_profit) if _profit is not None else "—",
@@ -1571,6 +1661,30 @@ sums = perf.get("sums:" + _k, lambda: business_summary(df, kinds, metric, dc, bi
 health = perf.get("health:" + _k, lambda: data_health(df, dc, metric, num_cols, refund_info,
                                                      join_conflicts, sampled_from))
 ins = perf.get("ins:" + _k, lambda: make_insights(df, kinds, metric, dc, big, detail))
+
+_issues_n = 0
+_issues = []
+if not (_clean_state and _clean_state.get("sig") == _DF_SIG):
+    _issues = perf.get("clean_issues", lambda: CL.detect(_RAW_DF))
+    _issues_n = len(_issues)
+if _issues_n:
+    _names = "、".join(i["问题"] for i in _issues[:3])
+    if _issues_n > 3:
+        _names += " 等"
+    st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
+                f"检测到 <b>{_issues_n} 类</b>数据问题：{_names}，"
+                f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
+
+_lead = ""
+if sums:
+    _lead = str(sums[0].get("text", ""))
+elif ins:
+    _lead = str(ins[0])
+if _lead:
+    _lead = re.sub(r"\*\*(.+?)\*\*", r"<b></b>", _lead)
+    st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
+
+# 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
 _adv = perf.get(f"advice:{metric}:{_qty_c0}:{_cost_c0}:{dc}:{detail}:{big}:{_oc0}:{target_amount}:{len(df)}",
                 lambda: ADV.build_advice(df, metric, _qty_c0, _cost_c0, _cost_force, dc,
                                          detail or big, big, _oc0, float(target_amount or 0)))
@@ -1578,6 +1692,11 @@ oc = AN.pick_order_col(df)
 cust_col = AN.find_col(df.columns, AN.CUST_HINT)
 cost_c = AN.find_col(df.columns, AN.COST_HINT, exclude={metric})
 qty_c = AN.find_col(df.columns, AN.QTY_HINT, exclude={metric})
+
+if dict_at_top:
+    with st.expander("📖 指标口径字典｜每个数字是怎么算出来的", expanded=False):
+        render_metric_dict(metric, qty_c, cost_c, oc, dc, refund_mode, gran,
+                           order_key_mode, tie_mode, aov_mode, cost_force, with_editor=False)
 _price_c0 = next((c for c in num_cols
                   if c != metric and any(h in str(c).lower() for h in ("单价", "售价", "price"))), None)
 _warn_n = sum(1 for h in health if h["level"] == "warn")
@@ -1600,109 +1719,6 @@ if metric:
 # ============================================================
 # 口径字典
 # ============================================================
-def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
-                       order_key="自动（推荐）", tie="按件数（数量合计）",
-                       aov="仅正向订单（推荐）", cost_mode="自动判断（推荐）", *,
-                       with_editor=True, with_table=True):
-    """口径字典：所有公式都按当前选择动态生成，选了什么就显示什么。"""
-    if cost_mode.startswith("按单价"):
-        cost_formula = f"Σ({cost_c} × {qty_c or '数量'})"
-    elif cost_mode.startswith("按成本"):
-        cost_formula = f"Σ「{cost_c}」"
-    else:
-        cost_formula = (f"Σ({cost_c} × {qty_c or '数量'})" if cost_c and AN.cost_kind(cost_c) == "单价"
-                        else f"Σ「{cost_c}」" if cost_c else "—")
-    order_formula = {"自动（推荐）": "去重订单号（跨期重复时自动 +日期）",
-                     "订单号+日期": "去重 订单号+日期",
-                     "订单号原样": "去重订单号"}[order_key]
-    tie_formula = ("Σ数量 ÷ 订单数" if tie.startswith("按件数") else "明细行数 ÷ 订单数")
-    aov_note = ("只统计金额>0 的订单" if aov.startswith("仅正向") else "退款单也进分母，客单价会被拉低")
-
-    rows = [
-        ("销售收入", f"Σ「{metric}」", "全部行的金额求和",
-         "退款行（负金额）默认计入 → 净销售额；切成「剔除」就是毛销售额，两者能差几个点"),
-        ("销售数量", f"Σ「{qty_c}」" if qty_c else "无数量列，用行数", qty_c or "行数",
-         "和收入同口径；退货行的负数量会冲减"),
-        ("成本", cost_formula, cost_c or "无成本列",
-         f"当前口径：{cost_mode}。列名像单价要乘数量，像总额直接求和——这条最容易算错"),
-        ("毛利", "销售收入 − 成本", "上面两行", "不含人工、房租、平台佣金，是商品毛利不是净利"),
-        ("毛利率", "毛利 ÷ 销售收入", "毛利 / 收入", "低毛利靠走量的生意，别用毛利率做唯一考核"),
-        ("订单数", order_formula, order_col or "无订单号列",
-         f"当前口径：{order_key}。订单号跨期复用时不加日期，连带率会虚高"),
-        ("客单价", "Σ订单金额 ÷ 订单数", f"{metric} / 订单号", aov_note),
-        ("件单价", "Σ金额 ÷ Σ数量", f"{metric} / {qty_c or '数量'}", "反映每件商品卖多少钱"),
-        ("连带率", tie_formula, "数量 / 订单号", f"当前口径：{tie}"),
-        ("客单价中位数", "订单金额的中位数", f"{metric}", "抗极端大单，看「典型顾客」花多少"),
-        ("金额校验", "金额 vs 数量×单价", f"{metric} / {qty_c or '—'} / 单价", "不一致多半是折扣满减，也可能是错单"),
-        ("构成占比", "某维度金额 ÷ 总金额", f"{metric} / 维度列", "环形图、树图都用这个"),
-        ("毛利占比", "某维度毛利 ÷ 总毛利", "毛利 / 维度列", "和金额占比对比，能看出「谁真正赚钱」"),
-        ("帕累托累计", "按金额降序的累计占比", f"{metric}", "ABC 分层阈值 70% / 90%"),
-        ("支持度", "同时含 A、B 的订单 ÷ 总订单", "订单号 + 商品", "购物篮用的基础频次"),
-        ("置信度", "含 A 的订单里也含 B 的比例", "订单号 + 商品", "做套餐命中率估算"),
-        ("提升度", "置信度 ÷ B 的基础购买率", "订单号 + 商品", ">1 才有正的连带关系；只看置信度会误判畅销品"),
-        ("环比", f"本期 vs 上一个{gran}", dc or "—", "看短期波动，受促销和断档影响大"),
-        ("同比", "本期 vs 去年同期", dc or "—", "剔掉季节性，判断趋势真假用这个"),
-        ("RFM", "R 最近一次距今 / F 购买频次 / M 累计金额，各做五分位", "会员列 + 日期 + 金额",
-         "快照式分层，不反映「新客留存到第 3 个月还剩多少」"),
-        ("目标达成率", "本期实际 ÷ 目标", f"{metric}", "目标是整期口径，月中查看时结合按速度推算值"),
-        ("预测", "移动平均 + 阻尼趋势 + 星期季节性偏移", dc or "—",
-         "区间用残差标准差算，不是置信区间推导；只适合短期"),
-        ("异常点", "滚动中位数 + MAD（|z|>3.5）", dc or "—", "比 3σ 抗极端值；先排查缺货/系统故障再剔除"),
-    ]
-    if with_editor:
-        st.markdown("<div class='sect'>指标公式<small>全部可改，改完立即生效；图表仍按列聚合，不受影响</small></div>",
-                    unsafe_allow_html=True)
-        st.caption("写法：sum(列名) / nunique(列名) / sum(进价 * 数量)；也能用 [毛利] / [销售收入] 引用别的指标。"
-                   "改的是「指标数值」，图形还是用原始列画。")
-        for _m in MT.ORDER:
-            _c1, _c2, _c3 = st.columns([1.1, 3.0, 1.7])
-            _c1.markdown(f"<div style='padding-top:7px;font-weight:600;font-size:13px'>{_m}</div>",
-                         unsafe_allow_html=True)
-            _c2.text_input(_m, key=f"fm_{_m}", label_visibility="collapsed",
-                           placeholder=_FM_DEFAULT.get(_m) or "（无此指标）")
-            if MVERR.get(_m):
-                _c3.markdown(f"<div style='color:#D64550;font-size:12px;padding-top:9px'>⚠ {MVERR[_m][:38]}</div>",
-                             unsafe_allow_html=True)
-            else:
-                _c3.markdown(f"<div style='color:{MUTED};font-size:13px;padding-top:9px'>"
-                             f"= {MT.display(_m, MV.get(_m))}</div>", unsafe_allow_html=True)
-        _b1, _b2, _ = st.columns([1.1, 1.1, 2.2])
-        if _b1.button("💾 保存公式", key="fm_save"):
-            _fm_now = {k: st.session_state.get(f"fm_{k}", v) for k, v in _FM_DEFAULT.items()}
-            st.session_state["_fm_saved"] = _fm_now
-            if MT.save_overrides(MT_FILE, _fm_now):
-                st.success("已保存（本机模式：写入 metric_formulas.json）")
-            else:
-                st.success("已保存到当前浏览器会话：刷新还在；换人或换设备看到的是默认口径")
-        if _b2.button("↺ 恢复默认", key="fm_reset"):
-            st.session_state.pop("_fm_saved", None)
-            MT.save_overrides(MT_FILE, {})
-            # 只赋值没用（widget 自己的 state 会盖掉），要删 key 再重跑
-            for k in _FM_DEFAULT:
-                st.session_state.pop(f"fm_{k}", None)
-            st.session_state["_fm_sig"] = None
-            st.rerun()
-
-    if with_table:
-        head = "".join(f"<th>{h}</th>" for h in ["指标", "计算公式", "取数", "口径提醒"])
-        body = ""
-        for r in rows:
-            body += ("<tr>" + f"<td>{r[0]}</td><td class='mono'>{r[1]}</td>"
-                     f"<td>{r[2]}</td><td class='note'>{r[3]}</td>" + "</tr>")
-        st.markdown(f"<table class='mdict'><thead><tr>{head}</tr></thead>"
-                    f"<tbody>{body}</tbody></table>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='insight'>上面每一条都是本工具<b>当前实际执行</b>的逻辑，会随左侧「口径设置」变化。"
-            "跟财务/老板对数之前，先把这张表对一遍——口径不一致时，数字差多少都能解释得通。</div>",
-            unsafe_allow_html=True)
-    elif with_editor:
-        # 只把「不是指标、改不了」的算法口径放折叠里，避免和上面的可改公式重复
-        _algo = [r for r in rows if r[0] not in MT.ORDER]
-        with st.expander(f"其余算法口径（{len(_algo)} 条，不需要改，核对时看）"):
-            st.dataframe(pd.DataFrame(_algo, columns=["口径", "算法", "取数", "说明"]),
-                         width="stretch", hide_index=True)
-
-
 _SECTIONS = ["数据清洗", "概览", "趋势", "结构", "经营", "库存订货", "客户与归因",
              "行动复盘", "统计建模", "SQL 查询", "数据与口径"]
 try:
@@ -1902,7 +1918,7 @@ if _sec == "SQL 查询":
     SQ.render_sql(df)
 
 if _sec == "统计建模":
-    AU.render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc)
+    _au().render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc)
 
 if _sec == "数据与口径":
     PV.render()
