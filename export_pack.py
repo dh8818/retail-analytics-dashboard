@@ -21,7 +21,6 @@ import numpy as np
 import pandas as pd
 
 import advice as ADV
-import ppt_export as PX
 
 PII_HINTS = ("手机", "电话", "姓名", "名字", "身份证", "地址", "邮箱", "卡号", "顾客", "会员名", "联系人")
 
@@ -192,6 +191,7 @@ def build_pack(df, metric=None, qty_col=None, cost_col=None, cost_force="auto",
     except Exception:
         adv = []
 
+    import ppt_export as PX          # 延迟导入：只有真的要出图时才付 matplotlib 的代价
     tmp = tempfile.mkdtemp(prefix="pack_")
     charts = {}
 

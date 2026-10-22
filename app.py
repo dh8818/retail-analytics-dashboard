@@ -37,10 +37,20 @@ import review_ui as RVU
 import cleaning_ui as CU
 import cleaning as CL
 import advanced_ui as AU
-try:
-    import ppt_export as PE
-except Exception:
-    PE = None
+# matplotlib / python-pptx 很重（约 200MB 内存、1 秒导入），
+# 只在真的要导出 PPT 时才加载，云端实例内存小，这点很关键
+PE = None
+
+
+def _pe():
+    global PE
+    if PE is None:
+        try:
+            import ppt_export as _mod
+            PE = _mod
+        except Exception:
+            PE = False
+    return PE or None
 from datetime import datetime
 
 MT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metric_formulas.json")
@@ -1954,13 +1964,13 @@ if _sec == "数据与口径":
     with st.expander("导出汇报 PPT（含图表与解读）", expanded=False):
         st.caption("按公司汇报格式生成：封面 / 执行摘要 / 核心指标 / 趋势 / 品类结构 / 毛利率 / "
                    "Top 商品 / 改善建议 / 附录口径，每张图配解读。图表为图片，可直接投屏。")
-        if PE is not None:
+        if _pe() is not None:
             st.caption(f"图表中文字体：{getattr(PE, '_FONT', '未知')}"
                        + ("（未找到中文字体，图表里的中文会变成方框）" if getattr(PE, "_FONT", "") == "DejaVu Sans" else ""))
         if st.button("生成 PPT", key="mk_ppt"):
             with st.spinner("正在生成 PPT…"):
                 try:
-                    st.session_state["_ppt_bytes"] = PE.build_deck(
+                    st.session_state["_ppt_bytes"] = _pe().build_deck(
                         df, metric=metric, qty_col=qty_c, cost_col=cost_c,
                         cost_force=_cost_force, date_col=dc, item_col=detail,
                         big_col=big, order_col=oc, gran=gran,
