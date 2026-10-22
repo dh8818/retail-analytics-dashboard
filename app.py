@@ -1532,7 +1532,7 @@ if metric:
 def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
                        order_key="自动（推荐）", tie="按件数（数量合计）",
                        aov="仅正向订单（推荐）", cost_mode="自动判断（推荐）", *,
-                       with_editor=True):
+                       with_editor=True, with_table=True):
     """口径字典：所有公式都按当前选择动态生成，选了什么就显示什么。"""
     if cost_mode.startswith("按单价"):
         cost_formula = f"Σ({cost_c} × {qty_c or '数量'})"
@@ -1579,7 +1579,7 @@ def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
         ("异常点", "滚动中位数 + MAD（|z|>3.5）", dc or "—", "比 3σ 抗极端值；先排查缺货/系统故障再剔除"),
     ]
     if with_editor:
-        st.markdown("<div class='sect'>指标公式<small>直接改，改完立即生效；图表仍按列聚合，不受影响</small></div>",
+        st.markdown("<div class='sect'>指标公式<small>全部可改，改完立即生效；图表仍按列聚合，不受影响</small></div>",
                     unsafe_allow_html=True)
         st.caption("写法：sum(列名) / nunique(列名) / sum(进价 * 数量)；也能用 [毛利] / [销售收入] 引用别的指标。"
                    "改的是「指标数值」，图形还是用原始列画。")
@@ -1612,18 +1612,24 @@ def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
             st.session_state["_fm_sig"] = None
             st.rerun()
 
-    head = "".join(f"<th>{h}</th>" for h in ["指标", "计算公式", "取数", "口径提醒"])
-    body = ""
-    for r in rows:
-        body += ("<tr>" + f"<td>{r[0]}</td><td class='mono'>{r[1]}</td>"
-                 f"<td>{r[2]}</td><td class='note'>{r[3]}</td>" + "</tr>")
-    st.markdown(f"<table class='mdict'><thead><tr>{head}</tr></thead>"
-                f"<tbody>{body}</tbody></table>", unsafe_allow_html=True)
-
-    st.markdown(
-        "<div class='insight'>上面每一条都是本工具<b>当前实际执行</b>的逻辑，会随左侧「口径设置」变化。"
-        "跟财务/老板对数之前，先把这张表对一遍——口径不一致时，数字差多少都能解释得通。</div>",
-        unsafe_allow_html=True)
+    if with_table:
+        head = "".join(f"<th>{h}</th>" for h in ["指标", "计算公式", "取数", "口径提醒"])
+        body = ""
+        for r in rows:
+            body += ("<tr>" + f"<td>{r[0]}</td><td class='mono'>{r[1]}</td>"
+                     f"<td>{r[2]}</td><td class='note'>{r[3]}</td>" + "</tr>")
+        st.markdown(f"<table class='mdict'><thead><tr>{head}</tr></thead>"
+                    f"<tbody>{body}</tbody></table>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='insight'>上面每一条都是本工具<b>当前实际执行</b>的逻辑，会随左侧「口径设置」变化。"
+            "跟财务/老板对数之前，先把这张表对一遍——口径不一致时，数字差多少都能解释得通。</div>",
+            unsafe_allow_html=True)
+    elif with_editor:
+        # 只把「不是指标、改不了」的算法口径放折叠里，避免和上面的可改公式重复
+        _algo = [r for r in rows if r[0] not in MT.ORDER]
+        with st.expander(f"其余算法口径（{len(_algo)} 条，不需要改，核对时看）"):
+            st.dataframe(pd.DataFrame(_algo, columns=["口径", "算法", "取数", "说明"]),
+                         width="stretch", hide_index=True)
 
 
 # ---------- 当前口径条 + 顶部字典 ----------
@@ -1672,7 +1678,8 @@ if _lead:
     st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
 
 # 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
-_SECTIONS = ["概览", "数据清洗", "趋势", "结构", "经营", "库存订货", "客户与归因", "行动复盘", "SQL 查询", "统计建模", "数据与口径"]
+_SECTIONS = ["数据清洗", "概览", "趋势", "结构", "经营", "库存订货", "客户与归因",
+             "行动复盘", "统计建模", "SQL 查询", "数据与口径"]
 try:
     _sec = st.segmented_control("模块", _SECTIONS, default=_SECTIONS[0],
                                 key="sec_pick", label_visibility="collapsed")
@@ -1944,7 +1951,8 @@ if _sec == "数据与口径":
     st.markdown("<div class='sect'>指标口径字典<small>每个数字是怎么算出来的</small></div>",
                 unsafe_allow_html=True)
     render_metric_dict(metric, qty_c, cost_c, oc, dc, refund_mode, gran,
-                       order_key_mode, tie_mode, aov_mode, cost_force)
+                       order_key_mode, tie_mode, aov_mode, cost_force,
+                       with_editor=True, with_table=False)
 
     with st.expander("查看列信息（自动识别的类型）"):
         kind_name = {"date": "日期", "num": "数值", "cat": "类别", "text": "文本", "id": "编号/ID",
@@ -1970,13 +1978,19 @@ if _sec == "数据与口径":
         if st.button("生成 PPT", key="mk_ppt"):
             with st.spinner("正在生成 PPT…"):
                 try:
+                    _ch_c = next((c for c in df.columns
+                                  if any(h in str(c) for h in ("渠道", "平台", "门店", "店铺", "店名"))), None)
+                    _cu_c = next((c for c in df.columns
+                                  if any(h in str(c) for h in ("会员", "客户", "顾客", "手机"))), None)
                     st.session_state["_ppt_bytes"] = _pe().build_deck(
                         df, metric=metric, qty_col=qty_c, cost_col=cost_c,
                         cost_force=_cost_force, date_col=dc, item_col=detail,
                         big_col=big, order_col=oc, gran=gran,
                         target=float(target_amount or 0),
                         title="经营分析报告",
-                        company=f"{sheet or '销售'} · 经营数据分析")
+                        company=f"{sheet or '销售'} · 经营数据分析",
+                        channel_col=_ch_c, cust_col=_cu_c,
+                        issues=perf.get("clean_issues", lambda: CL.detect(_RAW_DF)))
                 except Exception as _e:
                     st.error(f"生成失败：{_e}")
         if st.session_state.get("_ppt_bytes"):

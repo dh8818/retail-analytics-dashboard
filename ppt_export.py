@@ -284,7 +284,8 @@ def _chart_slide(prs, title, kicker, page, png, bullets, caption="", note="",
 # ---------------- 主流程 ----------------
 def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="auto",
                date_col=None, item_col=None, big_col=None, order_col=None,
-               gran="月", target=0.0, title="经营分析报告", company="", deck_note="") -> bytes:
+               gran="月", target=0.0, title="经营分析报告", company="", deck_note="",
+               channel_col=None, cust_col=None, issues=None) -> bytes:
     """返回 pptx 的二进制内容。任何一段算不出来就跳过那一页，不会整份失败。"""
     prs = Presentation()
     prs.slide_width = Inches(W)
@@ -489,7 +490,99 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
                      caption="按销售收入排序")
         page += 1
 
-    # ================= 7. 改善建议 =================
+
+    # ================= 7. 渠道 / 门店表现 =================
+    if channel_col and channel_col in df.columns and metric in df.columns:
+        g = df.groupby(channel_col)[metric].sum().sort_values(ascending=False)
+        if len(g) >= 2:
+            g = g.head(9)
+            total_all = float(_num(df[metric]).sum()) or 1.0
+            top3 = g.head(3).sum() / total_all * 100
+            bl = [f"第一是「{g.index[0]}」，{_fmt(g.iloc[0])}，占 {g.iloc[0]/total_all*100:.1f}%",
+                  f"前 3 个合计占 {top3:.0f}%，" + ("依赖度高，头部一出问题整体就掉"
+                                              if top3 > 60 else "分布相对分散，没有单点依赖"),
+                  f"最少的是「{g.index[-1]}」，{_fmt(g.iloc[-1])}，"
+                  f"只有第一名的 {g.iloc[-1]/g.iloc[0]*100:.0f}%"]
+            png = chart_hbar([str(i) for i in g.index], [float(v) for v in g.values],
+                             os.path.join(tmp, "chan.png"))
+            _chart_slide(prs, f"{channel_col}表现", "CHANNELS", page, png, bl,
+                         caption="按销售收入排序；占比口径见附录")
+            page += 1
+
+    # ================= 8. 客户结构 =================
+    if cust_col and cust_col in df.columns and metric in df.columns and date_col in df.columns:
+        d = df.dropna(subset=[cust_col]).copy()
+        d[metric] = _num(d[metric])
+        d["_k"] = d[cust_col].astype(str)
+        if len(d) and d["_k"].nunique() >= 10:
+            per = d.groupby("_k")[metric].agg(["sum", "count"]).sort_values("sum", ascending=False)
+            n_cust = len(per)
+            repeat = float((per["count"] >= 2).mean() * 100)
+            top10 = float(per["sum"].head(max(1, int(n_cust * 0.1))).sum() / max(per["sum"].sum(), 1) * 100)
+            s = prs.slides.add_slide(prs.slide_layouts[6])
+            _header(s, "客户结构", "CUSTOMERS")
+            kpis = [("客户数", f"{n_cust:,}"), ("复购客户占比", f"{repeat:.0f}%"),
+                    ("前 10% 客户贡献", f"{top10:.0f}%")]
+            for i, (lab, val) in enumerate(kpis):
+                x = 0.6 + i * 4.1
+                _rect(s, x, 1.45, 3.8, 1.25, WHITE, line=RULE)
+                _text(s, x + 0.22, 1.62, 3.4, 0.3, lab, size=10, color=GRAY)
+                _text(s, x + 0.22, 1.92, 3.4, 0.6, val, size=24, bold=True, color=NAVY)
+            _text(s, 0.6, 3.05, 12, 0.3, "累计消费最高的 5 位客户", size=11, bold=True, color=DARK)
+            rows = [("客户", "累计消费", "下单次数")] + [
+                (str(k), f"{v:,.0f}", f"{int(c)}")
+                for k, v, c in zip(per.index[:5], per["sum"].head(5), per["count"].head(5))]
+            tbl = s.shapes.add_table(len(rows), 3, Inches(0.6), Inches(3.4),
+                                     Inches(W - 1.2), Inches(0.38 * len(rows))).table
+            for r, row in enumerate(rows):
+                for c, val in enumerate(row):
+                    cell = tbl.cell(r, c)
+                    cell.text = str(val)
+                    cell.margin_left = Inches(0.08)
+                    for pp in cell.text_frame.paragraphs:
+                        for run in pp.runs:
+                            run.font.size = Pt(9.5 if r else 10)
+                            run.font.name = FONT
+                            run.font.bold = (r == 0)
+                            run.font.color.rgb = WHITE if r == 0 else DARK
+            _text(s, 0.6, 5.75, 11, 0.8,
+                  f"读法：复购客户占比 {repeat:.0f}% 越高越省获客成本；"
+                  f"前 10% 客户贡献 {top10:.0f}%，说明生意是「少数人撑起来」还是「靠人多」。",
+                  size=9.5, color=GRAY, spacing=1.2)
+            _footer(s, page)
+            page += 1
+
+    # ================= 9. 数据质量 =================
+    if issues:
+        s = prs.slides.add_slide(prs.slide_layouts[6])
+        _header(s, "数据质量", "DATA QUALITY")
+        show = [[i["级别"], i["问题"], str(i["数量"]), i["建议"][:26]] for i in issues[:7]]
+        rows = [("级别", "问题", "数量", "处理建议")] + show
+        tbl = s.shapes.add_table(len(rows), 4, Inches(0.6), Inches(1.45),
+                                 Inches(W - 1.2), Inches(0.42 * len(rows))).table
+        tbl.columns[0].width = Inches(0.9)
+        tbl.columns[1].width = Inches(5.2)
+        tbl.columns[2].width = Inches(1.3)
+        tbl.columns[3].width = Inches(4.7)
+        for r, row in enumerate(rows):
+            for c, val in enumerate(row):
+                cell = tbl.cell(r, c)
+                cell.text = str(val)
+                cell.margin_left = Inches(0.08)
+                for pp in cell.text_frame.paragraphs:
+                    for run in pp.runs:
+                        run.font.size = Pt(9.5 if r else 10)
+                        run.font.name = FONT
+                        run.font.bold = (r == 0)
+                        run.font.color.rgb = WHITE if r == 0 else DARK
+        _text(s, 0.6, 5.55, 11.5, 0.9,
+              "为什么要放这一页：上面所有结论都建立在这份数据上。"
+              "脏数据不会报错，只会让数字悄悄偏差——先说明清楚，结论才可信。",
+              size=9.5, color=GRAY, spacing=1.2)
+        _footer(s, page)
+        page += 1
+
+    # ================= 10. 改善建议 =================
     if adv_list:
         s = prs.slides.add_slide(prs.slide_layouts[6])
         _header(s, "改善建议", "RECOMMENDATIONS")
@@ -511,7 +604,36 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
         _footer(s, page)
         page += 1
 
-    # ================= 8. 附录：口径 =================
+    # ================= 11. 行动计划 =================
+    if adv_list:
+        s = prs.slides.add_slide(prs.slide_layouts[6])
+        _header(s, "行动计划", "ACTION PLAN")
+        rows = [("优先级", "问题", "要做的动作", "负责人", "截止", "预期效果")]
+        for a in adv_list[:6]:
+            rows.append((a["sev"], a["title"][:18], a["action"][:34], "", "", a["impact"][:26]))
+        tbl = s.shapes.add_table(len(rows), 6, Inches(0.5), Inches(1.45),
+                                 Inches(W - 1.0), Inches(0.46 * len(rows))).table
+        widths = [0.9, 3.0, 4.6, 1.1, 1.0, 2.8]
+        for i, wd in enumerate(widths):
+            tbl.columns[i].width = Inches(wd)
+        for r, row in enumerate(rows):
+            for c, val in enumerate(row):
+                cell = tbl.cell(r, c)
+                cell.text = str(val)
+                cell.margin_left = Inches(0.06)
+                for pp in cell.text_frame.paragraphs:
+                    for run in pp.runs:
+                        run.font.size = Pt(8.6 if r else 9.5)
+                        run.font.name = FONT
+                        run.font.bold = (r == 0)
+                        run.font.color.rgb = WHITE if r == 0 else DARK
+        _text(s, 0.5, 6.35, 11.5, 0.5,
+              "负责人和截止日期留空，是需要会上填的两栏——不填就没人负责。",
+              size=9, color=GRAY)
+        _footer(s, page)
+        page += 1
+
+    # ================= 12. 附录：口径 =================
     s = prs.slides.add_slide(prs.slide_layouts[6])
     _header(s, "附录：口径与方法", "APPENDIX")
     rows = [("指标", "计算方式", "说明"),
@@ -520,7 +642,11 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
             ("毛利 / 毛利率", "收入 − 成本；毛利 ÷ 收入", "商品毛利，非净利"),
             ("销售数量", f"Σ「{qty_col}」" if qty_col else "无数量列", "退货负数量冲减"),
             ("订单数", "订单号去重（跨期重复时加日期）", "纯退款单不计入"),
-            ("结构占比", "某维度金额 ÷ 总金额", "环形图、帕累托同口径")]
+            ("结构占比", "某维度金额 ÷ 总金额", "环形图、帕累托同口径"),
+            ("客单价", "订单金额合计 ÷ 订单数", "只算金额>0 的订单"),
+            ("连带率", "数量合计 ÷ 订单数", "反映一单买几件"),
+            ("环比 / 同比", "本期 ÷ 上一期（或去年同期）", "本期未走完时按日均比"),
+            ("预测", "移动平均 + 趋势 + 星期季节性", "只适合短期，别外推半年")]
     tbl = s.shapes.add_table(len(rows), 3, Inches(0.6), Inches(1.5),
                              Inches(W - 1.2), Inches(0.42 * len(rows))).table
     tbl.columns[0].width = Inches(2.2)

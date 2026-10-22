@@ -28,6 +28,32 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
     num_cols = [c for c in df.columns
                 if pd.api.types.is_numeric_dtype(df[c]) and not str(c).endswith("_计算")][:8]
 
+    st.markdown(
+        "<div class='insight'><b>这一页是干什么的（一句话）</b><br>"
+        "前面的页面回答「卖了多少、谁卖得好」；这一页回答两件事："
+        "<b>为什么会这样</b>，以及<b>这个差别是真的、还是运气</b>。<br>"
+        "举个例子：A 店比 B 店多卖 8%，可能是管理好，也可能只是那几天人多——"
+        "这一页就是用数据把这两种可能分开。</div>", unsafe_allow_html=True)
+
+    _cards = [
+        ("描述统计", "先看清「正常」长什么样", "均值被几笔大单拉高时，中位数才不骗人"),
+        ("差异检验", "两家店/两个方案的差别是真的吗", "p&lt;0.05 才算真差别，否则可能只是运气"),
+        ("回归", "到底哪个因素在影响销量", "知道预算该花在哪个因素上，而不是全都撒一遍"),
+        ("聚类", "不用你定标准，自动分组", "顾客/商品自动分成几类，每类怎么对待一目了然"),
+    ]
+    _cols = st.columns(4)
+    for _i, (_t, _q, _a) in enumerate(_cards):
+        with _cols[_i]:
+            st.markdown(
+                f"<div class='sumcard' style='min-height:118px'>"
+                f"<div style='font-size:13.5px;font-weight:600;color:#1F3864'>{_t}</div>"
+                f"<div style='font-size:12.5px;color:#1F2328;margin:6px 0'>{_q}</div>"
+                f"<div style='font-size:11.5px;color:#5F6672'>{_a}</div></div>",
+                unsafe_allow_html=True)
+
+    st.caption("什么时候这一页用不上：数据不足三个月、没有会员/订单级字段、样本太小（每组不到 30 条）。"
+               "这时候模型给的是参考，不能当结论。")
+
     # ---------- 1. 描述统计 ----------
     _sect("描述统计", "均值 / 中位数 / 标准差 / 分位数 / 偏度，先看清分布再谈结论")
     if num_cols:
