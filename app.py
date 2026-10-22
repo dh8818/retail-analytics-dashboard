@@ -970,7 +970,19 @@ if not ups and not st.session_state.get("_demo"):
           分布用直方图/箱线、关系用散点/相关矩阵、地理用气泡地图、期间对比用仪表盘
         """)
         st.caption("手机上更多设置（主表、口径、筛选）在左上角 ☰ 里。")
+        st.caption("⏱ 打开较慢是正常的：服务部署在国外（免费实例），国内访问需多等几秒；"
+                   "数据只在本机浏览器解析，不上传。")
         st.stop()
+
+_LOADTIP = st.empty()
+_LOADTIP.markdown(
+    "<div style='background:#F2F5FA;border-left:3px solid #1F3864;border-radius:3px;"
+    "padding:10px 14px;margin:8px 0 10px;font-size:13px;color:#1F2328'>"
+    "<b>正在加载数据…</b>　首次打开通常需要 <b>10–20 秒</b>，原因有两个：<br>"
+    "① 服务部署在国外（Streamlit 免费实例），国内访问要绕一圈；<br>"
+    "② 每次打开都要重新计算一遍指标。<br>"
+    "<span style='color:#5F6672'>你的文件只在这台电脑的浏览器里解析，不会上传到任何服务器。</span>"
+    "</div>", unsafe_allow_html=True)
 
 try:
     sheets = {}
@@ -1590,6 +1602,8 @@ if MV.get("毛利率") is not None:
 def _fm_custom(name, default_sub):
     return "自定义公式" if (_fm_cur.get(name) or "").strip() != (_FM_DEFAULT.get(name) or "").strip() else default_sub
 
+
+_LOADTIP.empty()
 
 _VIEW = st.radio(
     "看什么", ["老板视角（简单）", "专业分析（完整）"], horizontal=True,
