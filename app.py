@@ -2020,8 +2020,20 @@ if _sec == "客户与归因":
 # ---------------- 数据与口径 ----------------
 if _sec == "行动复盘":
     _rv_base = f"收入 {fmt(_sales)}" + (f" ｜ 毛利率 {_margin:.1f}%" if _margin is not None else "")
-    _rv_ctx = RVU._build_ctx(df, metric, _qty_c0, _cost_c0, big, detail, _sales, _margin)
-    RVU.render(_adv, base_text=_rv_base, ctx=_rv_ctx)
+    # ctx 就地构造：不依赖 review_ui 的内部函数，避免云端模块缓存未刷新时报 AttributeError
+    _rv_ctx = {
+        "df": df, "metric": metric, "qty": _qty_c0, "cost": _cost_c0,
+        "big": big, "detail": detail, "sales": _sales, "margin": _margin,
+        "items": (sorted({str(v).strip() for v in df[detail].dropna().astype(str)})
+                  if detail and detail in df.columns else []),
+        "cates": (sorted({str(v).strip() for v in df[big].dropna().astype(str)})
+                  if big and big in df.columns else []),
+    }
+    try:
+        RVU.render(_adv, base_text=_rv_base, ctx=_rv_ctx)
+    except TypeError:
+        # 云端 review_ui 若仍是旧版（render 没有 ctx 参数），降级为原逻辑，不让整页报错
+        RVU.render(_adv, base_text=_rv_base)
 
 if _sec == "SQL 查询":
     _nlq_schema = nlq.build_schema(df, metric=metric, qty=qty_c, date=dc,
