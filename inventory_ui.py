@@ -8,7 +8,7 @@ import inventory as INV
 import perf
 from style import BI_BLUE, BI_NAVY, MUTED, TEXT, fig_base, fmt
 
-_BAD, _WARN, _OK = "#D64550", "#C55A11", "#548235"
+_BAD, _WARN, _OK = "#A84A42", "#B9812F", "#6F8A63"
 
 
 def _sect(t, sub=""):
@@ -26,7 +26,7 @@ def _kpi(items):
 def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
     _sect("库存与订货", "缺货、临期、报损、该订多少——每个结论都能摊开算给你看")
     st.markdown(
-        "<div class='insight' style='border-left-color:#C55A11'>"
+        "<div class='insight' style='border-left-color:#B9812F'>"
         "<b>数据说明</b>：销量与金额来自你上传的销售明细；"
         "<b>期初库存、到货、在途、保质期、报损为策略仿真生成</b>（补货点 + 目标库存策略，FIFO 过期报损）。"
         "接入门店系统的库存快照后，这一页无需改代码即可换成真实数据。</div>",
@@ -95,18 +95,29 @@ def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
         st.dataframe(slow, width="stretch", hide_index=True)
 
     # ---------- 订货建议 ----------
-    _sect("订货建议", "目标库存 = 日均销量 × 覆盖天数 + 交期需求；建议订货 = 目标 − 库存位置")
-    st.caption("库存位置 = 期末库存 + 在途；鲜食按保质期封顶，避免「订了卖不掉」。")
-    plan = g[g["建议订货"] > 0].nlargest(15, "建议订货")
-    if plan.empty:
+    _sect("订货建议", "目标库存 = 日均销量 × 覆盖天数 + 交期需求 + 动态安全库存；建议订货 = 目标 − 库存位置")
+    st.caption("库存位置 = 期末库存 + 在途；鲜食按保质期封顶，避免「订了卖不掉」。"
+               "下表覆盖**全部商品**（默认按建议订货量降序），可搜索、可排序、可一键导出。")
+    _show_cols = ["商品名称", "品类", "日均销量", "期末库存", "在途",
+                  "库存位置", "交货周期", "保质期", "安全库存", "建议订货"]
+    _show_cols = [c for c in _show_cols if c in g.columns]
+    plan_all = g[g["建议订货"] > 0].sort_values("建议订货", ascending=False)
+    if plan_all.empty:
         st.caption("当前所有 SKU 库存充足，无需补货。")
     else:
-        st.dataframe(plan[["商品名称", "品类", "日均销量", "期末库存", "在途",
-                           "库存位置", "交货周期", "建议订货"]],
-                     width="stretch", hide_index=True)
+        st.markdown(f"<div style='font-size:12.5px;color:{MUTED};margin-bottom:4px'>"
+                    f"需补货 {len(plan_all)} / {len(g)} 个 SKU：</div>",
+                    unsafe_allow_html=True)
+        st.dataframe(plan_all[_show_cols], width="stretch", hide_index=True,
+                     height=360)
+        st.download_button(
+            "⬇ 一键导出订货建议（全部商品 CSV）",
+            plan_all[_show_cols].to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"订货建议_{pd.Timestamp.now():%Y%m%d_%H%M}.csv",
+            mime="text/csv", key="inv_plan_dl")
         with st.expander("看某一只商品是怎么算出来的", expanded=False):
-            pick = st.selectbox("选择商品", plan["商品名称"].tolist(), key="inv_pick")
-            row = plan[plan["商品名称"] == pick].iloc[0]
+            pick = st.selectbox("选择商品", plan_all["商品名称"].tolist(), key="inv_pick")
+            row = plan_all[plan_all["商品名称"] == pick].iloc[0]
             st.markdown(f"<div class='qbox'>{INV.reorder_explain(row)}</div>",
                         unsafe_allow_html=True)
             hist = snap[snap["商品编码"] == row["商品编码"]].tail(30)
@@ -116,9 +127,13 @@ def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
             f.add_trace(go.Scatter(x=hist["日期"], y=hist["在途"], name="在途",
                                    line=dict(color=BI_BLUE, width=2, dash="dot")))
             f.add_trace(go.Bar(x=hist["日期"], y=hist["销量"], name="日销量",
-                               marker_color="#9DC3E6"))
+                               marker_color="#E7C8B4"))
             fig_base(f, 320, f"{pick} 最近 30 天：库存、在途与销量", legend=True)
             st.plotly_chart(f, width="stretch", config={"displayModeBar": False})
+    # 不需补货的也可见（切换查看）
+    with st.expander(f"无需补货的 SKU（{len(g) - len(plan_all)} 个，库存充足）", expanded=False):
+        ok = g[g["建议订货"] <= 0]
+        st.dataframe(ok[_show_cols], width="stretch", hide_index=True)
 
-    st.download_button("下载库存快照 CSV", snap.to_csv(index=False).encode("utf-8-sig"),
+    st.download_button("下载库存快照 CSV（逐日明细）", snap.to_csv(index=False).encode("utf-8-sig"),
                        file_name="库存快照_模拟.csv", mime="text/csv", key="inv_dl")

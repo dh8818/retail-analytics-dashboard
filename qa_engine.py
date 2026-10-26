@@ -149,8 +149,8 @@ def waterfall(labels, values, total_label="合计变化", title=""):
         text=[fmt(v) for v in values] + [fmt(sum(values))],
         textposition="outside",
         connector=dict(line=dict(color=GRID)),
-        increasing=dict(marker=dict(color="#107C10")),
-        decreasing=dict(marker=dict(color="#A4262C")),
+        increasing=dict(marker=dict(color="#4F7A55")),
+        decreasing=dict(marker=dict(color="#A84A42")),
         totals=dict(marker=dict(color=BI_NAVY))))
     fig_base(fig, 380, title)
     fig.update_layout(margin=dict(l=74, r=24, t=48, b=78))
@@ -165,7 +165,7 @@ def compare_bar(cur, prev, dim, title=""):
     order = (cur - prev).abs().sort_values(ascending=False).index[:10]
     fig = go.Figure()
     fig.add_trace(go.Bar(x=[str(i)[:12] for i in order], y=[prev[i] for i in order],
-                         name="上期", marker_color="#C8C6C4"))
+                         name="上期", marker_color="#C6BCAF"))
     fig.add_trace(go.Bar(x=[str(i)[:12] for i in order], y=[cur[i] for i in order],
                          name="本期", marker_color=BI_BLUE))
     fig.update_layout(barmode="group")
@@ -307,7 +307,7 @@ def build_report(title, kpis, summaries, analysis, sheet, caliber=None):
     return f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <title>{title}</title><script>{get_plotlyjs()}</script>
 <style>
-body{{margin:0;background:#F3F2F1;font-family:{FONT};color:{TEXT};}}
+body{{margin:0;background:#F7F4EE;font-family:{FONT};color:{TEXT};}}
 .wrap{{max-width:1120px;margin:0 auto;padding:26px 22px 60px;}}
 h1{{font-size:22px;margin:0 0 4px;}} h2{{font-size:17px;margin:26px 0 10px;}}
 h3{{font-size:14px;margin:18px 0 8px;color:{MUTED};}}
@@ -318,16 +318,16 @@ h3{{font-size:14px;margin:18px 0 8px;color:{MUTED};}}
 .ks{{font-size:11px;color:{MUTED};margin-top:4px;}}
 .sum{{background:#fff;border-left:3px solid {BI_BLUE};border-radius:6px;padding:10px 14px;
       margin:8px 0;box-shadow:0 1px 3px rgba(0,0,0,.06);}}
-.sum b{{font-size:13.5px;}} .sum p{{margin:5px 0 0;font-size:13px;line-height:1.6;color:#424242;}}
-.q{{background:#EAF3FF;border-radius:6px;padding:9px 13px;font-size:13.5px;margin-bottom:10px;}}
+.sum b{{font-size:13.5px;}} .sum p{{margin:5px 0 0;font-size:13px;line-height:1.6;color:#4A443C;}}
+.q{{background:#F6EBE3;border-radius:6px;padding:9px 13px;font-size:13.5px;margin-bottom:10px;}}
 .line{{font-size:13.5px;line-height:1.75;margin:6px 0;}}
 table{{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border-radius:6px;overflow:hidden;}}
 th{{text-align:left;color:{MUTED};font-size:11.5px;padding:8px;border-bottom:1px solid {GRID};}}
-td{{padding:7px 8px;border-bottom:1px solid #F7F6F5;}} td.num{{text-align:right;}}
+td{{padding:7px 8px;border-bottom:1px solid #F0EBE3;}} td.num{{text-align:right;}}
 .card{{background:#fff;border-radius:8px;padding:8px 10px;margin:10px 0;
        box-shadow:0 1.6px 3.6px rgba(0,0,0,.1);}}
 .foot{{color:{MUTED};font-size:11px;text-align:center;margin-top:30px;}}
-.cal{{background:#fff;border-radius:6px;padding:10px 14px;font-size:12.5px;line-height:1.8;color:#424242;box-shadow:0 1px 3px rgba(0,0,0,.06);}}
+.cal{{background:#fff;border-radius:6px;padding:10px 14px;font-size:12.5px;line-height:1.8;color:#4A443C;box-shadow:0 1px 3px rgba(0,0,0,.06);}}
 </style></head><body><div class="wrap">
 <h1>{title}</h1>
 <div class="meta">数据表：{sheet} ｜ 生成时间：{datetime.now():%Y-%m-%d %H:%M}</div>

@@ -132,30 +132,44 @@ def basket_rules(df, order_col, item_col, min_support_abs=8, top_n=12):
     return out.head(top_n).reset_index(drop=True)
 
 
+def _is_unit_cost(name: str) -> bool:
+    """判断成本列是不是「单价」语义。
+    「销售单位成本」「单位成本」「成本单价」这类中文命名必须识别为单价，
+    否则单行成本会被当总额直接求和，毛利能错出一个数量级（真实案例：-1137万）。"""
+    n = str(name)
+    if any(h in n for h in ("进价", "进货价", "单价", "unit", "price")):
+        return True
+    # 含「成本」且带「单位」→ 单位成本（单价）
+    return "成本" in n and "单位" in n
+
+
 def cost_line(df, cost_col, qty_col=None, force="auto"):
     """把成本列换算成「每行成本总额」。
     force: auto（按列名判断）/ unit（强制当单价×数量）/ total（强制当总额）
+    单价语义但找不到数量列时返回 None——宁可不算，也不能把单价求和当总额（宁缺勿错）。
     """
     if not cost_col or cost_col not in df.columns:
         return None
     c = _num(df[cost_col]).fillna(0)
     name = str(cost_col)
-    unit_like = any(h in name for h in ("进价", "进货价", "单价", "unit", "price"))
-    total_like = any(h in name for h in ("成本", "成本额", "cost"))
+    unit_like = _is_unit_cost(name)
+    total_like = any(h in name for h in ("成本", "成本额", "cost")) and not unit_like
     if force == "total":
         return c
     if force == "unit":
-        return c * _num(df[qty_col]).fillna(0) if qty_col and qty_col in df.columns else c
-    if total_like and not unit_like:
+        return c * _num(df[qty_col]).fillna(0) if qty_col and qty_col in df.columns else None
+    if total_like:
         return c
-    if unit_like and qty_col and qty_col in df.columns:
-        return c * _num(df[qty_col]).fillna(0)
+    if unit_like:
+        if qty_col and qty_col in df.columns:
+            return c * _num(df[qty_col]).fillna(0)
+        return None          # 单价语义但没数量列：不猜，返回 None 让上层提示
     return c
 
 
 def cost_kind(cost_col):
     name = str(cost_col)
-    if any(h in name for h in ("进价", "进货价", "单价", "unit", "price")):
+    if _is_unit_cost(name):
         return "单价"
     return "总额"
 

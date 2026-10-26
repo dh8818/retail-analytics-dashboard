@@ -11,10 +11,13 @@
 """
 import ast
 import math
+from numbers import Real
 
 import pandas as pd
 
 MAX_LEN = 200
+# AST 递归深度上限：防「((((((...1...))))))」这类深层嵌套把解析/求值栈打爆
+MAX_DEPTH = 40
 FUNCS = {
     "sum": lambda s: s.sum(),
     "mean": lambda s: s.mean(),
@@ -56,9 +59,11 @@ def _numify(v):
     return v
 
 
-def _eval(node, df):
+def _eval(node, df, depth=0):
+    if depth > MAX_DEPTH:
+        raise FormulaError("公式嵌套太深")
     if isinstance(node, ast.Expression):
-        return _eval(node.body, df)
+        return _eval(node.body, df, depth + 1)
     if isinstance(node, ast.Constant):
         if isinstance(node.value, (int, float)):
             return float(node.value)
@@ -68,8 +73,10 @@ def _eval(node, df):
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.BinOp):
-        a, b = _eval(node.left, df), _eval(node.right, df)
-        if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
+        a, b = _eval(node.left, df, depth + 1), _eval(node.right, df, depth + 1)
+        # 用 numbers.Real 判断，而不是 isinstance(..., (int, float))：
+        # 后者会漏掉 numpy.float64 这类标量（pandas 聚合结果默认是 np.float64）
+        if not (isinstance(a, Real) and isinstance(b, Real)):
             raise FormulaError("四则运算两侧必须都是数值")
         if isinstance(node.op, ast.Add):
             return a + b
@@ -87,7 +94,7 @@ def _eval(node, df):
             return a % b
         raise FormulaError("不支持的运算符")
     if isinstance(node, ast.UnaryOp):
-        v = _eval(node.operand, df)
+        v = _eval(node.operand, df, depth + 1)
         if isinstance(node.op, ast.USub):
             return -v
         if isinstance(node.op, ast.UAdd):
@@ -110,7 +117,7 @@ def _eval(node, df):
                 raise FormulaError("乘号两边必须是列名，例如 sum(进货价 * 数量)")
             prod = _col(df, left) * _col(df, right)
             return float(FUNCS[fn](prod))
-        arg = _eval(argnode, df)
+        arg = _eval(argnode, df, depth + 1)
         if not isinstance(arg, str):
             raise FormulaError(f"{fn}() 的参数必须是列名，例如 sum(金额)")
         return float(FUNCS[fn](_col(df, arg, numeric=(fn in NUM_FUNCS))))

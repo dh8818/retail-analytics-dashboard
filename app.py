@@ -14,19 +14,18 @@
 import io
 import os
 import re
+import html as _html
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-import qa_engine
 import analytics as AN
 import extra_sections as XS
 import custom_metrics as CM
 import metrics as MT
 import advice as ADV
-import export_pack as EPK
 import sql_console as SQ
 import nlq
 import perf
@@ -69,7 +68,7 @@ from datetime import datetime
 MT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metric_formulas.json")
 
 from style import (BI_BLUE, BI_NAVY, PALETTE, CARD_BG, PAGE_BG, TEXT, MUTED, GRID,
-                   FONT, fmt, fig_base, MODEBAR)
+                   FONT, ACCENT_SOFT, fmt, fig_base, MODEBAR)
 
 
 def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
@@ -133,7 +132,7 @@ def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
             _c2.text_input(_m, key=f"fm_{_m}", label_visibility="collapsed",
                            placeholder=_FM_DEFAULT.get(_m) or "（无此指标）")
             if MVERR.get(_m):
-                _c3.markdown(f"<div style='color:#D64550;font-size:12px;padding-top:9px'>⚠ {MVERR[_m][:38]}</div>",
+                _c3.markdown(f"<div style='color:#A84A42;font-size:12px;padding-top:9px'>⚠ {MVERR[_m][:38]}</div>",
                              unsafe_allow_html=True)
             else:
                 _c3.markdown(f"<div style='color:{MUTED};font-size:13px;padding-top:9px'>"
@@ -188,6 +187,7 @@ if _DASH_PWD:
 _UI_TOKENS = {
     "PAGE_BG": PAGE_BG, "CARD_BG": CARD_BG, "TEXT": TEXT, "MUTED": MUTED,
     "GRID": GRID, "NAVY": BI_NAVY, "BLUE": BI_BLUE, "FONT": FONT,
+    "ACCENT_SOFT": ACCENT_SOFT,
 }
 try:
     _css = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui.css"),
@@ -306,6 +306,20 @@ def _load_cached(name: str, raw: bytes):
     return load_any(name, raw)
 
 
+@st.cache_data(show_spinner=False, max_entries=1)
+def _demo_df():
+    """示例数据只读一次，改筛选/下钻时不再重读 4 万行 CSV。"""
+    d = pd.read_csv(_DEMO_CSV, encoding="utf-8-sig")
+    if "会员编号" not in d.columns:
+        rng = np.random.default_rng(2026)
+        ids = np.array([f"M{i:04d}" for i in range(1, 401)])
+        w = 1.0 / np.arange(1, 401) ** 0.85
+        pick = rng.choice(ids, size=len(d), p=w / w.sum())
+        hit = rng.random(len(d)) < 0.45
+        d["会员编号"] = pd.Series(pick, index=d.index).where(hit)
+    return d
+
+
 def _as_key(s):
     return s.dropna().astype(str).str.strip()
 
@@ -339,6 +353,20 @@ def user_cols(df):
     """导出/计数时只给用户看的列：去掉 成本额_计算、订单键_计算 这类内部列。"""
     return [c for c in df.columns
             if not str(c).endswith("_计算") and not str(c).startswith("_")]
+
+
+def esc(v):
+    """把用户上传的文件名 / 表名安全地放进 HTML。文件名完全由用户控制，
+    不转义直接拼进 <div> 会变成 XSS 注入点。"""
+    return _html.escape(str(v))
+
+
+def safe_filename(name, fallback="下载"):
+    """把用户提供的表名 / 文件名消毒成安全的下载文件名：
+    去掉路径分隔符与 Windows 保留字符，避免路径穿越或非法文件名。"""
+    s = re.sub(r'[\\/:*?"<>|\r\n\t]', "_", str(name or "")).strip().strip(".")
+    s = re.sub(r"_+", "_", s)
+    return s[:80] or fallback
 
 
 # ---------- 表关系 ----------
@@ -447,10 +475,10 @@ def chart_trend(df, dc, metric, gran):
     ma = g.rolling(win, min_periods=1).mean() if win > 1 else g
     f = go.Figure()
     f.add_trace(go.Bar(x=list(g.index), y=list(g.values), name=gran + "值",
-                       marker=dict(color="rgba(17,141,255,0.35)"),
+                       marker=dict(color="rgba(201,116,79,0.35)"),
                        hovertemplate="%{x}<br>" + str(metric) + " %{y:,.0f}<extra></extra>"))
     f.add_trace(go.Scatter(x=list(g.index), y=list(ma.values), name=f"{win}期移动平均",
-                           mode="lines", line=dict(color="#E66C37", width=2.6)))
+                           mode="lines", line=dict(color="#C08A3E", width=2.6)))
     fig_base(f, 340, f"按{gran}看{metric}变化（柱＝当期，线＝移动平均）", legend=True)
     f.update_xaxes(tickangle=-35 if len(g) > 12 else 0)
     return f
@@ -468,8 +496,8 @@ def chart_year_month_heat(df, dc, metric):
     pv = pv.reindex(columns=range(1, 13))
     f = go.Figure(go.Heatmap(z=pv.values, x=[f"{m}月" for m in range(1, 13)],
                              y=[f"{int(y)}年" for y in pv.index],
-                             colorscale=[[0, "#F5F9FF"], [0.35, "#9CC9FF"],
-                                         [0.7, "#118DFF"], [1, "#12239E"]],
+                             colorscale=[[0, "#FBF7F0"], [0.35, "#E7C8B4"],
+                                         [0.7, "#C9744F"], [1, "#3F382D"]],
                              hovertemplate="%{y} %{x}<br>%{z:,.0f}<extra></extra>",
                              colorbar=dict(thickness=8, len=0.85,
                                            tickfont=dict(size=10, color=MUTED))))
@@ -487,7 +515,7 @@ def chart_quarter(df, dc, metric):
     if len(g) < 2:
         return None
     peak = g.idxmax()
-    colors = [BI_BLUE if i != peak else "#E66C37" for i in g.index]
+    colors = [BI_BLUE if i != peak else "#C08A3E" for i in g.index]
     f = go.Figure(go.Bar(x=list(g.index), y=list(g.values), marker=dict(color=colors),
                          text=[fmt(v) for v in g.values], textposition="outside",
                          textfont=dict(size=11, color=MUTED)))
@@ -590,7 +618,7 @@ def chart_pareto(df, dim, metric):
                        marker=dict(color=BI_BLUE), hovertemplate="%{x}<br>%{y:,.0f}<extra></extra>"))
     f.add_trace(go.Scatter(x=[str(i)[:12] for i in top.index], y=list(cum.head(15).values),
                            mode="lines+markers", yaxis="y2",
-                           line=dict(color="#E66C37", width=2.4), marker=dict(size=4)))
+                           line=dict(color="#C08A3E", width=2.4), marker=dict(size=4)))
     fig_base(f, 340, f"帕累托：{dim} 中少数贡献多少（柱＝值，线＝累计占比）")
     f.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105], ticksuffix="%",
                                 showgrid=False, tickfont=dict(size=10, color=MUTED)))
@@ -652,8 +680,8 @@ def chart_heat_cat(df, dc, cat, metric):
         return None
     f = go.Figure(go.Heatmap(z=pv.values, x=list(pv.columns),
                              y=[str(i)[:14] for i in pv.index],
-                             colorscale=[[0, "#F5F9FF"], [0.35, "#9CC9FF"],
-                                         [0.7, "#118DFF"], [1, "#12239E"]],
+                             colorscale=[[0, "#FBF7F0"], [0.35, "#E7C8B4"],
+                                         [0.7, "#C9744F"], [1, "#3F382D"]],
                              colorbar=dict(thickness=8, len=0.85,
                                            tickfont=dict(size=10, color=MUTED))))
     fig_base(f, 330, f"{cat} × 月份 热力（谁在哪个时间段发力）")
@@ -692,7 +720,7 @@ def chart_corr(df, nums):
     corr = df[nums].apply(to_numeric_col).corr()
     labels = [str(c)[:10] for c in nums]
     f = go.Figure(go.Heatmap(z=corr.values, x=labels, y=labels, zmin=-1, zmax=1,
-                             colorscale=[[0, "#D64550"], [0.5, "#F3F2F1"], [1, "#118DFF"]],
+                             colorscale=[[0, "#A84A42"], [0.5, "#F7F4EE"], [1, "#C9744F"]],
                              text=np.round(corr.values, 2), texttemplate="%{text}",
                              textfont=dict(size=9),
                              colorbar=dict(thickness=8, len=0.85,
@@ -739,15 +767,15 @@ def chart_gauge(df, dc, metric, gran, mode="环比"):
         mode="gauge+number+delta",
         value=round(ratio * 100, 1),
         number={"suffix": "%", "font": {"size": 30}},
-        delta={"reference": 100, "increasing": {"color": "#107C10"},
-               "decreasing": {"color": "#A4262C"}},
+        delta={"reference": 100, "increasing": {"color": "#4F7A55"},
+               "decreasing": {"color": "#A84A42"}},
         gauge={"axis": {"range": [0, 200], "tickwidth": 1, "tickcolor": MUTED},
                "bar": {"color": BI_BLUE, "thickness": 0.28},
                "bgcolor": "white", "borderwidth": 0,
-               "steps": [{"range": [0, 80], "color": "#FDE7E9"},
-                         {"range": [80, 120], "color": "#FFF4CE"},
-                         {"range": [120, 200], "color": "#E7F4E4"}],
-               "threshold": {"line": {"color": "#E66C37", "width": 3},
+               "steps": [{"range": [0, 80], "color": "#F6E3DE"},
+                         {"range": [80, 120], "color": "#F7EDD6"},
+                         {"range": [120, 200], "color": "#E7EFE0"}],
+               "threshold": {"line": {"color": "#C08A3E", "width": 3},
                              "thickness": 0.8, "value": 100}}))
     fig_base(f, 250, f"最近一个{gran} vs {cmp_label}（100%＝持平，{fmt(cur)} vs {fmt(prev)}）{_note}")
     return f
@@ -809,7 +837,7 @@ def chart_map(df, geo, metric):
     f = go.Figure(go.Scatter(x=xs, y=ys, mode="markers+text", text=list(g.index),
                              textposition="top center", textfont=dict(size=10, color=MUTED),
                              marker=dict(size=sizes, color=list(g.values),
-                                         colorscale=[[0, "#9CC9FF"], [1, "#12239E"]],
+                                         colorscale=[[0, "#E7C8B4"], [1, "#3F382D"]],
                                          line=dict(color="white", width=1),
                                          showscale=True,
                                          colorbar=dict(thickness=8, len=0.8,
@@ -818,7 +846,7 @@ def chart_map(df, geo, metric):
                              customdata=list(g.values)))
     f.update_layout(
         height=420, margin=dict(l=10, r=10, t=48, b=10),
-        paper_bgcolor=CARD_BG, plot_bgcolor="#F7FBFF",
+        paper_bgcolor=CARD_BG, plot_bgcolor="#FBF7F0",
         font=dict(family=FONT, size=12, color=TEXT),
         title=dict(text=f"省域分布：{metric}（气泡大小＝数值）",
                    font=dict(size=13.5, color=MUTED), x=0.015, y=0.97),
@@ -930,37 +958,69 @@ def make_insights(df, kinds, metric, dc, cat, detail):
 # ============================================================
 PV.badge()
 
+import sources_ui as SRU
+
 with st.sidebar:
-    st.markdown("#### 1. 上传数据")
-    ups = st.file_uploader("上传数据：Excel 或 CSV（多个文件可一次全选，每个文件算一张表）",
-                           type=["xlsx", "xlsm", "xls", "csv"], accept_multiple_files=True)
-    st.caption("数据只在本机内存里处理，不上传任何服务器。")
+    st.markdown("#### 1. 数据来源")
+    _src_mode = st.radio(
+        "怎么把数据拿进来", ["上传文件", "连接数据源"], horizontal=True,
+        key="src_mode", label_visibility="collapsed")
+    if _src_mode == "上传文件":
+        ups = st.file_uploader("上传数据：Excel 或 CSV（多个文件可一次全选，每个文件算一张表）",
+                               type=["xlsx", "xlsm", "xls", "csv"], accept_multiple_files=True)
+        st.caption("数据只在本机内存里处理，不上传任何服务器。")
+    else:
+        ups = None
+        SRU.render_source_picker("sb_")
+
+# 数据源 / 多门店入口（第 1/2/3 项新功能，独立页面，不干扰上传即分析主链路）
+with st.sidebar:
+    if SRU.is_active():
+        SRU.exit_active()
+    else:
+        SRU.render_entry()
+if SRU.is_active():
+    SRU.render()
+    st.stop()
 
 # 未上传时：主区直接给上传入口（手机端侧栏是收起的，入口必须放在正文里）
 _DEMO_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "pos.csv")
 
-if not ups and not st.session_state.get("_demo"):
-    st.markdown(
-        "<div style='background:#fff;border:1px solid #E3E6EA;border-left:4px solid #1F3864;"
-        "border-radius:3px;padding:18px 20px 6px;margin:6px 0 10px'>"
-        "<div style='font-size:16px;font-weight:600;color:#1F2328;margin-bottom:4px'>上传你的销售数据</div>"
-        "<div style='font-size:12.5px;color:#5F6672;margin-bottom:10px'>"
-        "支持 Excel（.xlsx / .xlsm / .xls）与 CSV，可多选；文件只在你自己的浏览器里解析。</div></div>",
-        unsafe_allow_html=True)
-    _main_up = st.file_uploader(
-        "选择文件（可多选）", type=["xlsx", "xlsm", "xls", "csv"],
-        accept_multiple_files=True, key="main_up", label_visibility="collapsed")
-    if _main_up:
-        ups = _main_up
+# 连接数据源的结果（session_state 里），与 ups 文件 / 示例数据三者合一
+# 门控：只有当当前模式是「连接数据源」时才启用连接结果，避免残留串数据
+_conn_sheets_state = st.session_state.get("_conn_sheets") if _src_mode == "连接数据源" else None
 
-    if not ups and os.path.exists(_DEMO_CSV):
-        st.markdown("<div style='font-size:12.5px;color:#5F6672;margin:10px 0 4px'>"
+if not ups and not _conn_sheets_state and not st.session_state.get("_demo"):
+    st.markdown(
+        "<div style='background:#fff;border:1px solid #E8E2D8;border-left:4px solid #B85532;"
+        "border-radius:12px;padding:18px 20px 8px;margin:6px 0 12px'>"
+        "<div style='font-size:16px;font-weight:600;color:#2A2723;margin-bottom:4px'>把数据拿进来</div>"
+        "<div style='font-size:12.5px;color:#6E685E;margin-bottom:10px'>"
+        "两种方式任选：上传文件，或连接收银系统数据源。文件只在你自己的浏览器里解析。</div></div>",
+        unsafe_allow_html=True)
+
+    # 正文里的来源切换：手机端侧栏收起时，也能在这里选
+    _main_mode = st.radio("数据来源", ["上传文件", "连接数据源"], horizontal=True,
+                          key="main_src_mode", label_visibility="collapsed")
+    if _main_mode == "连接数据源":
+        SRU.render_source_picker("mn_")
+        if st.session_state.get("_conn_sheets"):
+            _conn_sheets_state = st.session_state["_conn_sheets"]
+    else:
+        _main_up = st.file_uploader(
+            "选择文件（可多选）", type=["xlsx", "xlsm", "xls", "csv"],
+            accept_multiple_files=True, key="main_up", label_visibility="collapsed")
+        if _main_up:
+            ups = _main_up
+
+    if not ups and not _conn_sheets_state and os.path.exists(_DEMO_CSV):
+        st.markdown("<div style='font-size:12.5px;color:#6E685E;margin:10px 0 4px'>"
                     "还没有数据？先用示例数据看看能出什么：</div>", unsafe_allow_html=True)
         if st.button("加载示例数据（便利店 3 个月 POS，约 4 万行）", key="demo_load", type="primary"):
             st.session_state["_demo"] = True
             st.rerun()
 
-    if not ups and not st.session_state.get("_demo"):
+    if not ups and not _conn_sheets_state and not st.session_state.get("_demo"):
         st.markdown("""
         **会自动做的事**
         - 认出日期、数值、类别、编号列，不用改列名
@@ -976,27 +1036,18 @@ if not ups and not st.session_state.get("_demo"):
 
 _LOADTIP = st.empty()
 _LOADTIP.markdown(
-    "<div style='background:#F2F5FA;border-left:3px solid #1F3864;border-radius:3px;"
-    "padding:10px 14px;margin:8px 0 10px;font-size:13px;color:#1F2328'>"
+    "<div style='background:#F6EBE3;border-left:3px solid #B85532;border-radius:10px;"
+    "padding:12px 16px;margin:8px 0 12px;font-size:13px;color:#2A2723'>"
     "<b>正在加载数据…</b>　首次打开通常需要 <b>10–20 秒</b>，原因有两个：<br>"
     "① 服务部署在国外（Streamlit 免费实例），国内访问要绕一圈；<br>"
     "② 每次打开都要重新计算一遍指标。<br>"
-    "<span style='color:#5F6672'>你的文件只在这台电脑的浏览器里解析，不会上传到任何服务器。</span>"
+    "<span style='color:#6E685E'>你的文件只在这台电脑的浏览器里解析，不会上传到任何服务器。</span>"
     "</div>", unsafe_allow_html=True)
 
 try:
     sheets = {}
-    if not ups and st.session_state.get("_demo"):
-        _d = pd.read_csv(_DEMO_CSV, encoding="utf-8-sig")
-        # 示例 POS 没有会员列，客户与归因会整页空白；合成一列会员号，让 RFM/复购能演示
-        if "会员编号" not in _d.columns:
-            _rng = np.random.default_rng(2026)
-            _ids = np.array([f"M{i:04d}" for i in range(1, 401)])
-            _w = 1.0 / np.arange(1, 401) ** 0.85
-            _pick = _rng.choice(_ids, size=len(_d), p=_w / _w.sum())
-            _hit = _rng.random(len(_d)) < 0.45
-            # pandas 3 / numpy 2 不允许 str 与 nan 混在一个 ndarray，用 Series.where
-            _d["会员编号"] = pd.Series(_pick, index=_d.index).where(_hit)
+    if not ups and not _conn_sheets_state and st.session_state.get("_demo"):
+        _d = _demo_df()
         sheets["示例数据"] = _d
     for f in (ups or []):
         one = _load_cached(f.name, f.getvalue())
@@ -1007,7 +1058,16 @@ try:
                     if len(common) >= 2 else pd.concat([sheets[k], v], ignore_index=True)
             else:
                 sheets[k] = v
-    up_name = " + ".join(f.name for f in ups) if ups else "内置示例数据"
+    # 连接数据源拉到的表（与上传文件同构，直接并入 sheets）
+    if _conn_sheets_state:
+        for k, v in _conn_sheets_state["sheets"].items():
+            sheets[k] = v
+    if ups:
+        up_name = " + ".join(f.name for f in ups)
+    elif _conn_sheets_state:
+        up_name = _conn_sheets_state.get("label", "连接的数据源")
+    else:
+        up_name = "内置示例数据"
 except Exception as e:
     st.error(f"文件读不出来：{e}")
     st.stop()
@@ -1063,9 +1123,9 @@ joined_note = []
 join_conflicts = []
 for name, dim, fk, pk, rate, resolve in join_cfgs:
     df0, added, dup = apply_join(df0, dim, fk, pk, name, resolve)
-    joined_note.append(f"{name}.{pk} → {fk}（匹配 {rate*100:.0f}%，新增 {len(added)} 列）")
+    joined_note.append(f"{esc(name)}.{esc(pk)} → {esc(fk)}（匹配 {rate*100:.0f}%，新增 {len(added)} 列）")
     if dup:
-        join_conflicts.append(f"「{name}」的 {pk} 有 {dup} 行重复，按「{resolve}」合并")
+        join_conflicts.append(f"「{esc(name)}」的 {esc(pk)} 有 {dup} 行重复，按「{esc(resolve)}」合并")
 
 if df0.empty:
     st.warning("这个表是空的。")
@@ -1075,6 +1135,27 @@ kinds = profile(df0)
 date_cols = [c for c, k in kinds.items() if k == "date"]
 num_cols = [c for c, k in kinds.items() if k == "num"]
 cat_cols = [c for c, k in kinds.items() if k == "cat"]
+
+# ---------- 缺金额列时自动派生销售额 ----------
+# 有些表只有「数量 × 单价」没有「金额」列（如 Power BI 教学的 Sales Analysis Report）。
+# 不派生的话，pick_metric 会按关键词把「订单数量」选成主指标，
+# 收入变成 6.76 万、毛利错成 -1137 万（单价成本还被当总额求和）。
+_REV_HINTS = ("金额", "销售额", "营收", "收入", "成交额", "amount", "sales", "revenue", "gmv")
+_has_rev_col = any(any(h in str(c).lower() for h in _REV_HINTS) for c in df0.columns)
+_derived_note = ""
+if not _has_rev_col:
+    _qty_hint = ("数量", "销量", "件数", "qty", "quantity")
+    _price_hint = ("单价", "售价", "价格", "price")
+    _q_col = next((c for c in df0.columns if any(h in str(c).lower() for h in _qty_hint)
+                   and pd.api.types.is_numeric_dtype(df0[c])), None)
+    _p_col = next((c for c in df0.columns if any(h in str(c).lower() for h in _price_hint)
+                   and pd.api.types.is_numeric_dtype(df0[c])), None)
+    if _q_col and _p_col:
+        df0["销售额_计算"] = to_numeric_col(df0[_q_col]) * to_numeric_col(df0[_p_col])
+        kinds["销售额_计算"] = "num"
+        num_cols = [c for c, k in kinds.items() if k == "num"]
+        _derived_note = f"表里没有金额列，已按「{_q_col} × {_p_col}」自动算出销售额"
+
 auto_metric = pick_metric(num_cols)
 
 
@@ -1211,12 +1292,15 @@ _IS_BOSS_EARLY = str(st.session_state.get("view_mode", "老板视角（简单）
 st.markdown(
     "" if _IS_BOSS_EARLY else
     f"<div style='font-size:12.5px;color:{MUTED};margin-bottom:6px'>"
-    f"文件：{up_name} ｜ 主表：{sheet} ｜ {len(df):,} 行 × {df.shape[1]} 列 ｜ "
+    f"文件：{esc(up_name)} ｜ 主表：{esc(sheet)} ｜ {len(df):,} 行 × {df.shape[1]} 列 ｜ "
     f"识别出 {len(date_cols)} 个时间列、{len(num_cols)} 个数值列、{len(cat_cols)} 个类别列"
     + (f"、地理列「{geo}」" if geo else "") + "</div>", unsafe_allow_html=True)
 if joined_note and not _IS_BOSS_EARLY:
-    st.markdown(f"<div style='font-size:12px;color:#107C10;margin-bottom:6px'>🔗 已关联："
+    st.markdown(f"<div style='font-size:12px;color:#4F7A55;margin-bottom:6px'>🔗 已关联："
                 + "；".join(joined_note) + "</div>", unsafe_allow_html=True)
+if _derived_note:
+    st.markdown(f"<div style='font-size:12px;color:#4F7A55;margin-bottom:6px'>🧮 {_derived_note}</div>",
+                unsafe_allow_html=True)
 if dc:
     yrs = df[dc].dt.year.nunique()
     qs = df[dc].dt.to_period("Q").nunique()
@@ -1263,11 +1347,11 @@ def data_health(df, dc, metric, num_cols, refund_info, join_conflicts, sampled_f
         bad = int(((to_numeric_col(df[metric]) - calc).abs() > 0.02).sum())
         if bad:
             items.append({"level": "warn", "title": f"金额校验不通过 {bad:,} 行",
-                          "text": f"「{metric}」≠ 数量×单价 的有 {bad:,} 条（{bad/len(df)*100:.1f}%）。"
+                          "text": f"「{esc(metric)}」≠ 数量×单价 的有 {bad:,} 条（{bad/len(df)*100:.1f}%）。"
                                   f"多半是折扣/满减，也可能是错单——做毛利和价格分析前要确认。"})
         else:
             items.append({"level": "ok", "title": "金额校验通过",
-                          "text": f"{metric} 与 数量×单价 全部一致。"})
+                          "text": f"{esc(metric)} 与 数量×单价 全部一致。"})
 
     dup = int(df.duplicated().sum())
     if dup:
@@ -1278,7 +1362,7 @@ def data_health(df, dc, metric, num_cols, refund_info, join_conflicts, sampled_f
                     if any(h in str(c).lower() for h in ("成本", "进价", "cost", "进货"))), None)
     if cost_c0:
         kind = AN.cost_kind(cost_c0)
-        items.append({"level": "info", "title": f"毛利口径：「{cost_c0}」按{kind}算",
+        items.append({"level": "info", "title": f"毛利口径：「{esc(cost_c0)}」按{kind}算",
                       "text": ("已按 单价 × 数量 换算成本；如果这列其实是每行总成本，毛利会被高估，请核对。"
                                if kind == "单价" else
                                "这列当作每行成本总额直接求和；如果其实是单价，毛利会被严重低估。")})
@@ -1287,7 +1371,7 @@ def data_health(df, dc, metric, num_cols, refund_info, join_conflicts, sampled_f
     heavy = miss[miss > 0.2].sort_values(ascending=False)
     if len(heavy):
         items.append({"level": "warn", "title": f"{len(heavy)} 列缺失严重",
-                      "text": "；".join(f"「{c}」缺 {v*100:.0f}%" for c, v in heavy.head(4).items())
+                      "text": "；".join(f"「{esc(c)}」缺 {v*100:.0f}%" for c, v in heavy.head(4).items())
                               + "。用这些列做维度会掉数据。"})
 
     for t in join_conflicts:
@@ -1300,7 +1384,7 @@ def data_health(df, dc, metric, num_cols, refund_info, join_conflicts, sampled_f
     const = [c for c in df.columns if df[c].nunique(dropna=True) <= 1]
     if const:
         items.append({"level": "info", "title": f"{len(const)} 个常量列",
-                      "text": "、".join(str(c) for c in const[:5]) + " 只有一个取值，做维度没意义。"})
+                      "text": "、".join(esc(c) for c in const[:5]) + " 只有一个取值，做维度没意义。"})
     return items
 
 
@@ -1520,7 +1604,8 @@ perf.set_sig(f"{_DF_SIG}|clean={int(_clean_on)}|rows={len(df)}")
 _qty_c0 = next((c for c in num_cols
                 if c != metric and any(h in str(c).lower() for h in ("数量", "销量", "件数", "qty", "quantity"))), None)
 _sku_c0 = next((c for c in df.columns if str(c) in ("商品编码", "SKU", "sku", "货号", "条码")
-                 or any(h in str(c) for h in ("商品编码", "货号", "条码", "SKU"))), None)
+                 or any(h in str(c) for h in ("商品编码", "货号", "条码", "SKU",
+                                              "产品编号", "产品编码", "物料编码"))), None)
 # 同名不同 ID：两个 SKU 叫同一个名字时，按名称聚合会被合并，这里换成「名称 (编码)」做键
 if detail and _sku_c0 and detail in df.columns and _sku_c0 in df.columns:
     try:
@@ -1606,9 +1691,16 @@ def _fm_custom(name, default_sub):
 _LOADTIP.empty()
 
 _VIEW = st.radio(
-    "看什么", ["老板视角（简单）", "专业分析（完整）"], horizontal=True,
+    "看什么", ["老板视角（简单）", "专业分析（完整）", "演示大屏（炫酷）"], horizontal=True,
     key="view_mode", label_visibility="collapsed",
-    help="老板视角只回答「赚没赚、漏在哪、改什么」；专业分析是完整的 11 个模块。")
+    help="老板视角只回答「赚没赚、漏在哪、改什么」；专业分析是完整的 11 个模块；"
+         "演示大屏是深色全屏风，给老板/客户看结果用。")
+
+if _VIEW.startswith("演示大屏"):
+    import dashboard_ui as DBU
+    DBU.render(df, metric=metric, date_col=dc, big_col=big, qty_col=_qty_c0,
+               cost_col=_cost_c0, order_col=_oc0, cost_force=_cost_force)
+    st.stop()
 
 if _VIEW.startswith("老板"):
     # 这一段跑在专业分析之前，所以需要的列和建议就地算，别依赖后面才定义的变量
@@ -1655,10 +1747,10 @@ st.markdown(
 _hero = [
     ("销售收入", fmt(_sales), _fm_custom("销售收入", "净额（含退款）" if refund_mode == "计入" else "毛销售（已剔除退款）"), BI_NAVY),
     ("毛利", fmt(_profit) if _profit is not None else "—",
-     _fm_custom("毛利", "收入 − 成本") if _profit is not None else "表里没有成本/进价列", "#2E75B6"),
+     _fm_custom("毛利", "收入 − 成本") if _profit is not None else "表里没有成本/进价列", "#C9744F"),
     ("毛利率", f"{_margin:.1f}%" if _margin is not None else "—",
-     _fm_custom("毛利率", "毛利 ÷ 收入") if _margin is not None else "需要成本列才能算", "#548235"),
-    ("销售数量", f"{_qty:,.0f}", _fm_custom("销售数量", f"来自「{_qty_c0}」" if _qty_c0 else "行数（无数量列）"), "#7F8A99"),
+     _fm_custom("毛利率", "毛利 ÷ 收入") if _margin is not None else "需要成本列才能算", "#6F8A63"),
+    ("销售数量", f"{_qty:,.0f}", _fm_custom("销售数量", f"来自「{_qty_c0}」" if _qty_c0 else "行数（无数量列）"), "#9A9084"),
 ]
 _hc = st.columns(4)
 for _i, (_lab, _val, _sub, _color) in enumerate(_hero):
@@ -1685,7 +1777,7 @@ if _issues_n:
     _names = "、".join(i["问题"] for i in _issues[:3])
     if _issues_n > 3:
         _names += " 等"
-    st.markdown(f"<div class='brief' style='border-left-color:#C55A11'>"
+    st.markdown(f"<div class='brief' style='border-left-color:#B9812F'>"
                 f"检测到 <b>{_issues_n} 类</b>数据问题：{_names}，"
                 f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
 
@@ -1695,7 +1787,8 @@ if sums:
 elif ins:
     _lead = str(ins[0])
 if _lead:
-    _lead = re.sub(r"\*\*(.+?)\*\*", r"<b></b>", _lead)
+    _lead = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", _lead)
+    _lead = _html.escape(_lead).replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
     st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
 
 # 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
@@ -1716,7 +1809,7 @@ _price_c0 = next((c for c in num_cols
 _warn_n = sum(1 for h in health if h["level"] == "warn")
 
 if _warn_n:
-    st.markdown(f"<div style='font-size:12px;color:#E66C37;margin:2px 0 6px'>"
+    st.markdown(f"<div style='font-size:12px;color:#C08A3E;margin:2px 0 6px'>"
                 f"⚠ 数据体检发现 {_warn_n} 处需要注意，详见「数据与口径」页</div>",
                 unsafe_allow_html=True)
 
@@ -1754,19 +1847,19 @@ if _sec == "概览":
             for j, it in enumerate(pair):
                 with cols2[j]:
                     st.markdown(
-                        f"<div class='sumcard'><div class='sumhead'>{it['icon']} {it['title']}</div>"
-                        f"<div class='sumtext'>{it['text']}</div></div>", unsafe_allow_html=True)
+                        f"<div class='sumcard'><div class='sumhead'>{it['icon']} {esc(it['title'])}</div>"
+                        f"<div class='sumtext'>{esc(it['text'])}</div></div>", unsafe_allow_html=True)
     if _adv:
         st.markdown("<div class='sect'>改善建议<small>按你这份数据算的，每条都带依据；预期是粗估，不是承诺</small></div>",
                     unsafe_allow_html=True)
         for _a in _adv:
-            _col = {"高": "#D64550", "中": "#E66C37", "低": "#107C10"}.get(_a["sev"], MUTED)
+            _col = {"高": "#A84A42", "中": "#C08A3E", "低": "#4F7A55"}.get(_a["sev"], MUTED)
             st.markdown(
                 f"<div class='sumcard' style='border-left:4px solid {_col}'>"
-                f"<div class='sumhead'><span style='color:{_col};font-weight:700'>{_a['sev']}</span> · {_a['title']}</div>"
-                f"<div class='sumtext'><b>依据</b>：{_a['evidence']}<br>"
-                f"<b>怎么做</b>：{_a['action']}<br>"
-                f"<b>预期</b>：{_a['impact']}</div></div>", unsafe_allow_html=True)
+                f"<div class='sumhead'><span style='color:{_col};font-weight:700'>{_a['sev']}</span> · {esc(_a['title'])}</div>"
+                f"<div class='sumtext'><b>依据</b>：{esc(_a['evidence'])}<br>"
+                f"<b>怎么做</b>：{esc(_a['action'])}<br>"
+                f"<b>预期</b>：{esc(_a['impact'])}</div></div>", unsafe_allow_html=True)
 
     # 汇报话术：把结论组织成能直接念的一段话
     if metric:
@@ -1807,6 +1900,9 @@ if _sec == "概览":
         with st.expander("数据层面的自动结论（集中度 / 趋势 / 异常 / 质量）", expanded=False):
             for t in ins:
                 t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+                # make_insights 里拼了品类/商品/列名等用户数据，渲染前统一转义，
+                # 只放行上面刚生成的 <b> 标签
+                t = _html.escape(t).replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
                 st.markdown(f"<div class='insight'>{t}</div>", unsafe_allow_html=True)
 
 # ---------------- 趋势 ----------------
@@ -1917,12 +2013,14 @@ if _sec == "客户与归因":
     else:
         st.info("没有识别到会员/客户列（如会员卡号、customer id），客户分层需要这类字段。")
     if metric and dc:
+        import qa_engine
         qa_engine.render(df, dc, metric, num_cols, cat_cols, big, detail, sheet, items, sums, cmp_mode, _caliber_bits)
         XS.section_compare(df, dc, metric, cat_cols, chart_card)
 
 # ---------------- 数据与口径 ----------------
 if _sec == "行动复盘":
-    RVU.render(_adv)
+    _rv_base = f"收入 {fmt(_sales)}" + (f" ｜ 毛利率 {_margin:.1f}%" if _margin is not None else "")
+    RVU.render(_adv, base_text=_rv_base)
 
 if _sec == "SQL 查询":
     _nlq_schema = nlq.build_schema(df, metric=metric, qty=qty_c, date=dc,
@@ -1951,7 +2049,7 @@ if _sec == "数据与口径":
             row = health[i:i + 3]
             hc = st.columns(3)
             for j, it in enumerate(row):
-                color = {"warn": "#E66C37", "ok": "#107C10", "info": BI_BLUE}[it["level"]]
+                color = {"warn": "#C08A3E", "ok": "#4F7A55", "info": BI_BLUE}[it["level"]]
                 icon = {"warn": "⚠", "ok": "✓", "info": "ⓘ"}[it["level"]]
                 with hc[j]:
                     st.markdown(
@@ -2022,7 +2120,7 @@ if _sec == "数据与口径":
     with st.expander("查看数据明细（前 200 行）"):
         st.dataframe(df.head(200), width="stretch")
         st.download_button("下载当前数据 CSV", df[user_cols(df)].to_csv(index=False).encode("utf-8-sig"),
-                           file_name=f"分析数据_{sheet}.csv", mime="text/csv")
+                           file_name=f"分析数据_{safe_filename(sheet)}.csv", mime="text/csv")
 
     with st.expander("导出汇报 PPT（含图表与解读）", expanded=False):
         st.caption("按公司汇报格式生成：封面 / 执行摘要 / 核心指标 / 趋势 / 品类结构 / 毛利率 / "
@@ -2064,6 +2162,7 @@ if _sec == "数据与口径":
                 try:
                     _rows = [{"指标": _k, "数值": MV.get(_k), "公式": _FM_DEFAULT.get(_k, ""),
                               "说明": "见页面口径字典"} for _k in list(MV.keys())] if MV else []
+                    import export_pack as EPK
                     st.session_state["_pack_bytes"] = EPK.build_pack(
                         df, metric=metric, qty_col=qty_c, cost_col=cost_c, cost_force=_cost_force,
                         date_col=dc, item_col=detail, big_col=big, order_col=oc,
@@ -2110,3 +2209,73 @@ if _sec == "数据与口径":
                 st.session_state["_xlsx"],
                 file_name=f"分析结果_{pd.Timestamp.now():%Y%m%d_%H%M}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    # ---------- 发送到邮箱 ----------
+    with st.expander("✉️ 发送到邮箱（把分析结果直接发给自己/老板）", expanded=False):
+        import mailer as ML
+        st.caption("用你自己的邮箱（QQ/163/126 等）发送：填发件邮箱 + 授权码 + 收件邮箱即可。"
+                   "授权码不是登录密码，在邮箱设置的 SMTP 服务里生成。"
+                   "数据只经你自己的邮箱发出，不经过任何第三方。")
+        cfg = ML.get_config()
+        # 选邮箱类型时，自动把对应的 SMTP 服务器/端口写进 session_state，
+        # 否则 text_input 的 value 只在首次渲染生效，切类型不会回填
+        def _on_mail_type():
+            _h, _p = ML.smtp_for(st.session_state.get("mail_type", ""))
+            st.session_state["mail_host"] = _h
+            st.session_state["mail_port"] = int(_p or 465)
+        c1, c2 = st.columns(2)
+        email_type = c1.selectbox("邮箱类型", list(ML.SMTP_SERVERS.keys()),
+                                  key="mail_type", on_change=_on_mail_type)
+        host, port = ML.smtp_for(email_type)
+        # 首次进入（session_state 还没有值）时用类型默认值
+        if "mail_host" not in st.session_state:
+            st.session_state["mail_host"] = host
+            st.session_state["mail_port"] = int(port or 465)
+        sender = c2.text_input("发件邮箱", value=cfg.get("sender", ""), key="mail_sender",
+                               placeholder="your@qq.com")
+        c3, c4 = st.columns(2)
+        auth = c3.text_input("授权码", value="", type="password", key="mail_auth",
+                             help="QQ邮箱：设置→账户→POP3/SMTP服务→生成授权码；163/126：设置→客户端授权密码；Outlook：用登录密码或应用密码")
+        to = c4.text_input("收件邮箱", value="", key="mail_to", placeholder="boss@qq.com")
+        c5, c6 = st.columns(2)
+        host_in = c5.text_input("SMTP 服务器", key="mail_host",
+                                help="选邮箱类型会自动填；换类型也会自动更新")
+        port_in = c6.number_input("端口", min_value=1, max_value=65535, key="mail_port",
+                                  help="465 是 SSL，587 是 STARTTLS")
+        subject = st.text_input("主题", value=f"经营分析报告 {pd.Timestamp.now():%Y-%m-%d}", key="mail_subject")
+        # 附件选项：当前数据 CSV / 分析结果 Excel（若已生成）/ HTML 报告（若已生成）
+        att_opts = ["不附附件", "当前数据 CSV", "分析结果 Excel", "汇报 PPT"]
+        has_xlsx = bool(st.session_state.get("_xlsx"))
+        has_ppt = bool(st.session_state.get("_ppt_bytes"))
+        if not has_xlsx:
+            att_opts.remove("分析结果 Excel")
+        if not has_ppt:
+            att_opts.remove("汇报 PPT")
+        att_choice = st.selectbox("附件", att_opts, key="mail_att")
+        body = st.text_area("正文", value="这是由经营分析看板生成的报告，详见附件。", key="mail_body", height=100)
+
+        if st.button("发送邮件", key="mail_send", type="primary"):
+            if not (sender and auth and to and host_in):
+                st.error("发件邮箱、授权码、收件邮箱、SMTP 服务器都不能为空。")
+            else:
+                with st.spinner("正在发送…"):
+                    attachments = []
+                    if att_choice == "当前数据 CSV":
+                        attachments.append((f"分析数据_{safe_filename(sheet)}.csv",
+                                            df[user_cols(df)].to_csv(index=False).encode("utf-8-sig"),
+                                            "text/csv"))
+                    elif att_choice == "分析结果 Excel" and st.session_state.get("_xlsx"):
+                        attachments.append((f"分析结果_{pd.Timestamp.now():%Y%m%d_%H%M}.xlsx",
+                                            st.session_state["_xlsx"],
+                                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    elif att_choice == "汇报 PPT" and st.session_state.get("_ppt_bytes"):
+                        attachments.append((f"经营分析报告_{pd.Timestamp.now():%Y%m%d_%H%M}.pptx",
+                                            st.session_state["_ppt_bytes"],
+                                            "application/vnd.openxmlformats-officedocument.presentationml.presentation"))
+                    ok, msg = ML.send_mail(sender, auth, to, subject, body,
+                                           host_in, port_in, use_ssl=(int(port_in) == 465),
+                                           attachments=attachments)
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)

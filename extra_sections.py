@@ -63,7 +63,7 @@ def section_orders(df, oc, metric, qty_col, dc, card, key_mode="auto", tie="qty"
         daily = orders.groupby(orders["日期"].dt.normalize()).size()
         f = go.Figure(go.Scatter(x=list(daily.index), y=list(daily.values), mode="lines",
                                  line=dict(color=BI_NAVY, width=2),
-                                 fill="tozeroy", fillcolor="rgba(18,35,158,0.08)"))
+                                 fill="tozeroy", fillcolor="rgba(63,56,45,0.08)"))
         fig_base(f, 280, "每日订单数")
         card(f, "o_daily")
 
@@ -107,7 +107,7 @@ def section_margin(df, big, metric, cost_col, card, qty_col=None, force="auto"):
     d = ms.sort_values("占比差")
     f = go.Figure()
     f.add_trace(go.Bar(x=list(d["金额占比%"]), y=[str(i)[:12] for i in d.index], orientation="h",
-                       name="金额占比", marker_color="#C8C6C4"))
+                       name="金额占比", marker_color="#C6BCAF"))
     f.add_trace(go.Bar(x=list(d["毛利占比%"]), y=[str(i)[:12] for i in d.index], orientation="h",
                        name="毛利占比", marker_color=BI_BLUE))
     fig_base(f, 340, "金额占比 vs 毛利占比（蓝条比灰条长的，才是真正赚钱的）", legend=True)
@@ -191,10 +191,10 @@ def section_target(df, dc, metric, gran, target, card):
         value=round(tp["rate"], 1),
         number={"suffix": "%", "font": {"size": 30}},
         gauge={"axis": {"range": [0, 200]},
-               "bar": {"color": BI_BLUE if tp["rate"] >= 100 else "#E66C37", "thickness": 0.3},
-               "steps": [{"range": [0, 60], "color": "#FDE7E9"},
-                         {"range": [60, 100], "color": "#FFF4CE"},
-                         {"range": [100, 200], "color": "#E7F4E4"}],
+               "bar": {"color": BI_BLUE if tp["rate"] >= 100 else "#C08A3E", "thickness": 0.3},
+               "steps": [{"range": [0, 60], "color": "#F6E3DE"},
+                         {"range": [60, 100], "color": "#F7EDD6"},
+                         {"range": [100, 200], "color": "#E7EFE0"}],
                "threshold": {"line": {"color": BI_NAVY, "width": 3}, "value": 100}}))
     fig_base(f, 280, f"本期 {gran}目标 {fmt(tp['target'])}，实际 {fmt(tp['actual_y'])}")
     c1, c2 = st.columns([2, 3])
@@ -246,7 +246,7 @@ def section_compare(df, dc, metric, cat_cols, card):
         dl = res["delta_series"]
         top = pd.concat([dl.head(5), dl.tail(5)]).drop_duplicates()
         f = go.Figure(go.Bar(x=[str(i)[:12] for i in top.index], y=list(top.values),
-                             marker_color=["#A4262C" if v < 0 else "#107C10" for v in top.values],
+                             marker_color=["#A84A42" if v < 0 else "#4F7A55" for v in top.values],
                              text=[fmt(v) for v in top.values], textposition="outside",
                              textfont=dict(size=10, color=MUTED)))
         fig_base(f, 340, f"{dim} 的变化（红＝下降，绿＝上升）")
@@ -278,18 +278,18 @@ def section_forecast(df, dc, metric, gran, card):
                            mode="lines", line=dict(color=BI_BLUE, width=1.4)))
     if fit is not None:
         f.add_trace(go.Scatter(x=list(fit.index), y=list(fit.values), name="趋势(移动平均)",
-                               mode="lines", line=dict(color="#C8C6C4", width=1.6, dash="dot")))
+                               mode="lines", line=dict(color="#C6BCAF", width=1.6, dash="dot")))
     f.add_trace(go.Scatter(x=list(fc.index), y=list(fc["预测"]), name="预测",
-                           mode="lines+markers", line=dict(color="#E66C37", width=2.4)))
+                           mode="lines+markers", line=dict(color="#C08A3E", width=2.4)))
     f.add_trace(go.Scatter(x=list(fc.index) + list(fc.index)[::-1],
                            y=list(fc["上界"]) + list(fc["下界"])[::-1],
-                           fill="toself", fillcolor="rgba(230,108,55,0.15)",
+                           fill="toself", fillcolor="rgba(192,138,62,0.15)",
                            line=dict(width=0), name="预测区间(95%)", hoverinfo="skip"))
     an = AN.detect_anomalies(s)
     if an is not None and an["异常"].any():
         pts = an[an["异常"]]
         f.add_trace(go.Scatter(x=list(pts.index), y=list(pts["值"]), name="异常点",
-                               mode="markers", marker=dict(color="#A4262C", size=9,
+                               mode="markers", marker=dict(color="#A84A42", size=9,
                                                            symbol="x", line=dict(width=2))))
     fig_base(f, 380, f"{metric}：历史 + 未来 {periods} 个{gran}预测（阴影为 95% 区间）", legend=True)
     card(f, "forecast", 400)
@@ -336,7 +336,7 @@ def section_discount(df, metric, qty_col, price_col, cat_col, card):
         g["让利率%"] = (g["让利"] / g["销售额"].replace(0, np.nan) * 100).round(1)
         g = g.sort_values("让利", ascending=False).head(10)
         f = go.Figure(go.Bar(x=list(g.index.astype(str)), y=list(g["让利率%"]),
-                             marker_color="#E66C37",
+                             marker_color="#C08A3E",
                              text=[f"{v:.1f}%" for v in g["让利率%"]], textposition="outside",
                              textfont=dict(size=10, color=MUTED)))
         fig_base(f, 320, f"{cat_col} 的让利率（让利金额 ÷ 销售额）")
@@ -354,7 +354,7 @@ def section_discount(df, metric, qty_col, price_col, cat_col, card):
             rate = (rg / sg.replace(0, np.nan) * 100).dropna().sort_values(ascending=False).head(10)
             if len(rate):
                 f = go.Figure(go.Bar(x=list(rate.index.astype(str)), y=list(rate.values),
-                                     marker_color="#A4262C",
+                                     marker_color="#A84A42",
                                      text=[f"{v:.1f}%" for v in rate.values], textposition="outside",
                                      textfont=dict(size=10, color=MUTED)))
                 fig_base(f, 320, f"{cat_col} 的退货率（退货金额 ÷ 正向销售额）")

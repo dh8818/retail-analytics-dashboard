@@ -2,16 +2,31 @@
 """
 统一样式与数字格式（原先 app.py / qa_engine.py / extra_sections.py 各抄了一份）
 改配色、改数字缩写规则，只改这里。
+
+设计基调：暖「陶土 / 奶白」风 —— 参考 Claude 官网的视觉语言：
+奶白底色、陶土主色、柔和阴影、克制的动效、清晰的排版层级与充足留白。
 """
 import numpy as np
-# Power BI 配色
-BI_BLUE, BI_NAVY = "#2E75B6", "#1F3864"
-PALETTE = ["#1F3864", "#2E75B6", "#548235", "#C55A11", "#7030A0",
-           "#BF8F00", "#7F7F7F", "#9DC3E6"]
 
-CARD_BG, PAGE_BG = "#FFFFFF", "#F5F6F8"
-TEXT, MUTED, GRID = "#1F2328", "#5F6672", "#E3E6EA"
-FONT = "Segoe UI, Microsoft YaHei, sans-serif"
+# ---------- 主色：陶土（主强调）+ 深墨（中性强调） ----------
+BI_BLUE = "#C9744F"   # 浅陶土：次级强调（insight / sumcard 左边框、hover）
+BI_NAVY = "#B85532"   # 深陶土：主强调（主按钮、KPI 数值、区块标记、激活态）
+
+# 分类色板：暖色为主，掺少量冷色保证多系列图表可区分
+PALETTE = ["#B85532", "#3F382D", "#6F8A63", "#C08A3E",
+           "#5F7A96", "#8E6B7C", "#4E7E7A", "#9A9084"]
+
+# ---------- 语义色：好 / 坏 / 警示（保留红=负、绿=正的业务语义） ----------
+GOOD = "#4F7A55"       # 正向（低风险 / 盈利 / 达成）
+BAD = "#A84A42"        # 负向（高风险 / 亏损 / 未达成）
+WARN = "#B9812F"       # 警示（中等 / 提醒）
+
+# ---------- 背景与文本 ----------
+CARD_BG, PAGE_BG = "#FFFFFF", "#F7F4EE"
+TEXT, MUTED, GRID = "#2A2723", "#6E685E", "#E8E2D8"
+ACCENT_SOFT = "#F6EBE3"   # 陶土淡底（提示条 / 高亮）
+FONT = ('system-ui, -apple-system, "Segoe UI", "PingFang SC", '
+        '"Microsoft YaHei", "Hiragino Sans GB", sans-serif')
 MODEBAR = {"displayModeBar": False}
 
 

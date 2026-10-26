@@ -27,6 +27,8 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
     # 排除程序内部注入的计算列（成本额_计算 / 订单键_计算），它们对用户是噪音
     num_cols = [c for c in df.columns
                 if pd.api.types.is_numeric_dtype(df[c]) and not str(c).endswith("_计算")][:8]
+    # 综合结论：各块算出结果后，往里追加一句话，最后在页面末尾统一渲染
+    _summary = []
 
     st.markdown(
         "<div class='insight'><b>这一页是干什么的（一句话）</b><br>"
@@ -46,9 +48,9 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
         with _cols[_i]:
             st.markdown(
                 f"<div class='sumcard' style='min-height:118px'>"
-                f"<div style='font-size:13.5px;font-weight:600;color:#1F3864'>{_t}</div>"
-                f"<div style='font-size:12.5px;color:#1F2328;margin:6px 0'>{_q}</div>"
-                f"<div style='font-size:11.5px;color:#5F6672'>{_a}</div></div>",
+                f"<div style='font-size:13.5px;font-weight:600;color:#B85532'>{_t}</div>"
+                f"<div style='font-size:12.5px;color:#2A2723;margin:6px 0'>{_q}</div>"
+                f"<div style='font-size:11.5px;color:#6E685E'>{_a}</div></div>",
                 unsafe_allow_html=True)
 
     st.caption("什么时候这一页用不上：数据不足三个月、没有会员/订单级字段、样本太小（每组不到 30 条）。"
@@ -71,6 +73,9 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                        + ("右偏，少数大值在拉高均值 → 看中位数更稳" if sk[worst] > 0.5
                           else "左偏，少数小值在拖低均值" if sk[worst] < -0.5
                           else "接近对称，均值可用"))
+            _summary.append(
+                f"「{worst}」分布偏斜（偏度 {sk[worst]:.2f}），均值会被少数极端值带偏，"
+                "判断「典型水平」应看中位数而不是平均。")
 
     # ---------- 2. 两组差异检验 ----------
     _sect("两组差异是否显著", "Welch t 检验：均值差是真实差异还是随机波动")
@@ -97,6 +102,9 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                     + ("<b>差异显著</b>（p&lt;0.05，不太可能是抽样偶然）" if sig
                        else "<b>差异不显著</b>（p≥0.05，不能排除随机波动，别急着下结论）")
                     + "</div>", unsafe_allow_html=True)
+                _summary.append(
+                    f"「{a}」和「{b_val}」的{col}差异{'显著' if sig else '不显著'}（p={_fmt_p(res['p'])}，"
+                    f"相差 {fmt(res['diff'])}）：{'说明这个差别是真的，值得追因' if sig else '还不足以排除随机波动，先别据此下结论'}。")
 
     # ---------- 3. 线性回归 ----------
     _sect("线性回归", "谁在影响结果、影响多大、模型解释了多少")
@@ -128,6 +136,20 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                                 unsafe_allow_html=True)
                     for line in EX.model_readout(m, y_col):
                         st.caption("· " + line)
+                # 找影响最大的显著变量，写进综合结论
+                _sig_vars = [(n, float(m["coef"][i + 1]))
+                             for i, n in enumerate(m["xs"])
+                             if i + 1 < len(m["table"]) and float(m["table"]["p 值"][i + 1]) < 0.05]
+                if _sig_vars:
+                    _top_n, _top_c = max(_sig_vars, key=lambda x: abs(x[1]))
+                    _summary.append(
+                        f"影响 {y_col} 最显著的是「{_top_n}」（系数 {_top_c:,.2f}，方向{'正' if _top_c > 0 else '负'}），"
+                        f"模型整体解释力 {'强' if m['r2'] >= 0.7 else '中' if m['r2'] >= 0.4 else '弱'}（R²={m['r2']:.3f}）——"
+                        "这是最值得先动的杠杆，但注意相关不等于因果。")
+                else:
+                    _summary.append(
+                        f"对 {y_col} 的回归里没有任何自变量显著（R²={m['r2']:.3f}），"
+                        "这份数据里还看不出稳定的影响因素，先别用这个模型做决策。")
 
     # ---------- 4. 聚类 ----------
     _sect("K-Means 聚类", "不预设分类，让数据自己分组（客户/商品/门店都适用）")
@@ -165,6 +187,9 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                 st.markdown("<div class='sect' style='margin-top:12px'>每一群是什么"
                             "<small>相对整体均值看，偏高还是偏低</small></div>", unsafe_allow_html=True)
                 st.dataframe(pd.DataFrame(prof), width="stretch", hide_index=True)
+                _summary.append(
+                    f"数据自然分成 {km['k']} 群，差别最大的特征是「{feats[0]}」——"
+                    "这 {0} 群意味着不同的经营对象需要区别对待，而不是一刀切。".format(km['k']))
 
     # ---------- 5. 指标拆解 ----------
     _sect("指标拆解", "收入为什么变？拆成「量」和「价」各自贡献了多少")
@@ -195,6 +220,9 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                         f"· 两者交互 {d['interaction']:+,.0f}<br>"
                         f"→ {'主要由量带动' if abs(d['eff_a']) > abs(d['eff_b']) else '主要由价带动'}"
                         f"，三项相加严格等于总收入变化。</div>", unsafe_allow_html=True)
+                    _summary.append(
+                        f"{cur_m} 比 {prev_m} 的收入变化{'主要由订单量带动' if abs(d['eff_a']) > abs(d['eff_b']) else '主要由客单价带动'}——"
+                        f"{'要增收得先把客流/订单做起来' if abs(d['eff_a']) > abs(d['eff_b']) else '靠提价或提高连带，而不是盲目冲量'}。")
         except Exception as e:
             st.caption(f"拆解暂不可用：{e}")
 
@@ -211,3 +239,25 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                 m1 = rate.iloc[:, 1].mean()
                 st.caption(f"次月平均留存 {m1:.0f}%；留存曲线掉得快说明复购没做起来，"
                            f"比拉新更值得投入的是让老客回来。")
+                _summary.append(
+                    f"次月平均留存只有 {m1:.0f}%——客户来得快去得也快，"
+                    "把资源从「拉新」转到「让老客回来」通常更划算。")
+
+    # ============ 综合结论（把上面所有建模结果串成一句话） ============
+    if _summary:
+        st.markdown("<div class='sect' style='margin-top:20px'>综合结论"
+                    "<small>把上面的建模结果串起来，回答「到底该做什么」</small></div>",
+                    unsafe_allow_html=True)
+        for _i, _s in enumerate(_summary, 1):
+            st.markdown(
+                f"<div class='sumcard' style='border-left:4px solid #B85532;margin-bottom:8px'>"
+                f"<div style='font-size:13px;line-height:1.7'>{_i}. {_s}</div></div>",
+                unsafe_allow_html=True)
+        st.markdown(
+            "<div class='insight' style='border-left-color:#6F8A63'>"
+            "<b>一句话</b>：上面的结论都来自当前这份数据、当前选的模型参数；"
+            "它们是「相关关系 + 显著性」的证据，不是因果，动手前先用对照实验或时间先后再验证一次。</div>",
+            unsafe_allow_html=True)
+    else:
+        st.info("当前数据或选择还没跑出可用的建模结果（样本不足 / 缺少字段），"
+                "所以没有综合结论。补足字段或换一份数据再试。")

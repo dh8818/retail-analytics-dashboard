@@ -23,19 +23,19 @@ from pptx.util import Inches, Pt
 
 import advice as ADV
 
-# ---------------- 视觉规范 ----------------
-NAVY = RGBColor(0x12, 0x23, 0x9E)
-BLUE = RGBColor(0x11, 0x8D, 0xFF)
-DARK = RGBColor(0x25, 0x24, 0x23)
-GRAY = RGBColor(0x60, 0x5E, 0x5C)
-LIGHT = RGBColor(0xF3, 0xF2, 0xF1)
-RULE = RGBColor(0xDD, 0xDB, 0xDA)
+# ---------------- 视觉规范（暖陶土，与主看板一致） ----------------
+NAVY = RGBColor(0xB8, 0x55, 0x32)
+BLUE = RGBColor(0xC9, 0x74, 0x4F)
+DARK = RGBColor(0x1A, 0x1A, 0x1A)
+GRAY = RGBColor(0x6E, 0x68, 0x5E)
+LIGHT = RGBColor(0xF7, 0xF4, 0xEE)
+RULE = RGBColor(0xE8, 0xE2, 0xD8)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-GREEN = RGBColor(0x10, 0x7C, 0x10)
-RED = RGBColor(0xD6, 0x45, 0x50)
-ORANGE = RGBColor(0xE6, 0x6C, 0x37)
+GREEN = RGBColor(0x4F, 0x7A, 0x55)
+RED = RGBColor(0xA8, 0x4A, 0x42)
+ORANGE = RGBColor(0xC0, 0x8A, 0x3E)
 
-HEX = ["#118DFF", "#12239E", "#E66C37", "#6B007B", "#E044A7", "#744EC2", "#D9B300", "#D64550"]
+HEX = ["#B85532", "#3F382D", "#6F8A63", "#C08A3E", "#5F7A96", "#8E6B7C", "#4E7E7A", "#9A9084"]
 FONT = "Microsoft YaHei"
 
 W, H = 13.333, 7.5
@@ -111,18 +111,18 @@ def _save(fig, path):
 
 def chart_trend(x, rev, profit, path):
     fig, ax = plt.subplots(figsize=(7.6, 4.0))
-    ax.bar(x, rev, color="#CFE4FF", width=0.62, label="销售收入")
+    ax.bar(x, rev, color="#E7C8B4", width=0.62, label="销售收入")
     ax2 = ax.twinx()
-    ax2.plot(x, profit, color="#12239E", lw=2.2, marker="o", ms=3.5, label="毛利")
-    ax.set_ylabel("销售收入（元）", color="#605E5C", fontsize=9)
-    ax2.set_ylabel("毛利（元）", color="#12239E", fontsize=9)
-    ax.tick_params(colors="#605E5C", labelsize=8)
-    ax2.tick_params(colors="#12239E", labelsize=8)
+    ax2.plot(x, profit, color="#B85532", lw=2.2, marker="o", ms=3.5, label="毛利")
+    ax.set_ylabel("销售收入（元）", color="#6E685E", fontsize=9)
+    ax2.set_ylabel("毛利（元）", color="#B85532", fontsize=9)
+    ax.tick_params(colors="#6E685E", labelsize=8)
+    ax2.tick_params(colors="#B85532", labelsize=8)
     for s in ["top"]:
         ax.spines[s].set_visible(False); ax2.spines[s].set_visible(False)
-    ax.spines["left"].set_color("#DDDBDA"); ax.spines["bottom"].set_color("#DDDBDA")
-    ax2.spines["right"].set_color("#DDDBDA")
-    ax.grid(axis="y", color="#EDEBE9", lw=0.8)
+    ax.spines["left"].set_color("#C6BCAF"); ax.spines["bottom"].set_color("#C6BCAF")
+    ax2.spines["right"].set_color("#C6BCAF")
+    ax.grid(axis="y", color="#E8E2D8", lw=0.8)
     ax.set_axisbelow(True)
     step = max(len(x) // 7, 1)
     idx = list(range(0, len(x), step))
@@ -137,8 +137,8 @@ def chart_donut(labels, values, path):
     wedges, _ = ax.pie(values, colors=HEX[:len(labels)], startangle=90,
                        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=1.5))
     total = sum(values) or 1
-    ax.text(0, 0.08, "合计", ha="center", va="center", fontsize=9, color="#605E5C")
-    ax.text(0, -0.12, _fmt(total), ha="center", va="center", fontsize=13, color="#252423", weight="bold")
+    ax.text(0, 0.08, "合计", ha="center", va="center", fontsize=9, color="#6E685E")
+    ax.text(0, -0.12, _fmt(total), ha="center", va="center", fontsize=13, color="#1A1A1A", weight="bold")
     ax.legend(wedges, [f"{l}  {v/total*100:.0f}%" for l, v in zip(labels, values)],
               loc="center left", bbox_to_anchor=(0.98, 0.5), fontsize=8.5, frameon=False)
     return _save(fig, path)
@@ -148,21 +148,21 @@ def chart_pareto(labels, values, path, top=10):
     s = pd.Series(values, index=labels).sort_values(ascending=False).head(top)
     cum = s.cumsum() / s.sum() * 100
     fig, ax = plt.subplots(figsize=(7.2, 3.4))
-    ax.bar(range(len(s)), s.values, color="#118DFF", width=0.62)
+    ax.bar(range(len(s)), s.values, color="#C9744F", width=0.62)
     ax2 = ax.twinx()
-    ax2.plot(range(len(s)), cum.values, color="#E66C37", lw=2, marker="o", ms=3.5)
-    ax2.axhline(80, color="#D9B300", ls="--", lw=1)
+    ax2.plot(range(len(s)), cum.values, color="#C08A3E", lw=2, marker="o", ms=3.5)
+    ax2.axhline(80, color="#B9812F", ls="--", lw=1)
     ax2.set_ylim(0, 105)
     ax.set_xticks(range(len(s)))
     ax.set_xticklabels([str(v)[:6] for v in s.index], rotation=35, ha="right", fontsize=8)
-    ax.tick_params(colors="#605E5C", labelsize=8)
-    ax2.tick_params(colors="#E66C37", labelsize=8)
+    ax.tick_params(colors="#6E685E", labelsize=8)
+    ax2.tick_params(colors="#C08A3E", labelsize=8)
     ax.spines["top"].set_visible(False); ax2.spines["top"].set_visible(False)
-    ax.grid(axis="y", color="#EDEBE9", lw=0.8); ax.set_axisbelow(True)
+    ax.grid(axis="y", color="#E8E2D8", lw=0.8); ax.set_axisbelow(True)
     return _save(fig, path)
 
 
-def chart_hbar(labels, values, path, color="#118DFF", height=3.4, title_unit="元"):
+def chart_hbar(labels, values, path, color="#C9744F", height=3.4, title_unit="元"):
     fig, ax = plt.subplots(figsize=(7.2, height))
     order = np.argsort(values)
     labs = [str(labels[i])[:12] for i in order]
@@ -171,11 +171,11 @@ def chart_hbar(labels, values, path, color="#118DFF", height=3.4, title_unit="�
     ax.set_yticks(range(len(vals)))
     ax.set_yticklabels(labs, fontsize=8.5)
     for b, v in zip(bars, vals):
-        ax.text(v, b.get_y() + b.get_height() / 2, f" {_fmt(v)}", va="center", fontsize=7.5, color="#605E5C")
+        ax.text(v, b.get_y() + b.get_height() / 2, f" {_fmt(v)}", va="center", fontsize=7.5, color="#6E685E")
     ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("#DDDBDA"); ax.spines["bottom"].set_color("#DDDBDA")
-    ax.grid(axis="x", color="#EDEBE9", lw=0.8); ax.set_axisbelow(True)
-    ax.tick_params(colors="#605E5C", labelsize=8)
+    ax.spines["left"].set_color("#C6BCAF"); ax.spines["bottom"].set_color("#C6BCAF")
+    ax.grid(axis="x", color="#E8E2D8", lw=0.8); ax.set_axisbelow(True)
+    ax.tick_params(colors="#6E685E", labelsize=8)
     return _save(fig, path)
 
 
@@ -184,16 +184,16 @@ def chart_margin(labels, margins, path):
     order = np.argsort(margins)[::-1]
     labs = [str(labels[i])[:10] for i in order]
     vals = [margins[i] * 100 for i in order]
-    colors = ["#118DFF" if v >= 0 else "#D64550" for v in vals]
+    colors = ["#C9744F" if v >= 0 else "#A84A42" for v in vals]
     bars = ax.bar(range(len(vals)), vals, color=colors, width=0.6)
     for b, v in zip(bars, vals):
         ax.text(b.get_x() + b.get_width() / 2, v, f"{v:.1f}%",
-                ha="center", va="bottom" if v >= 0 else "top", fontsize=8, color="#605E5C")
+                ha="center", va="bottom" if v >= 0 else "top", fontsize=8, color="#6E685E")
     ax.set_xticks(range(len(vals))); ax.set_xticklabels(labs, fontsize=8.5)
-    ax.axhline(0, color="#DDDBDA", lw=1)
+    ax.axhline(0, color="#C6BCAF", lw=1)
     ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-    ax.grid(axis="y", color="#EDEBE9", lw=0.8); ax.set_axisbelow(True)
-    ax.tick_params(colors="#605E5C", labelsize=8)
+    ax.grid(axis="y", color="#E8E2D8", lw=0.8); ax.set_axisbelow(True)
+    ax.tick_params(colors="#6E685E", labelsize=8)
     return _save(fig, path)
 
 
@@ -298,12 +298,13 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
     cost_total = None
     margin = None
     if cost_col and cost_col in df.columns:
-        c = _num(df[cost_col])
-        if cost_force != "total" and qty_col and qty_col in df.columns:
-            c = c * _num(df[qty_col])
-        cost_total = float(c.sum())
-        if rev_total:
-            margin = (rev_total - cost_total) / rev_total
+        # 成本口径与全站同源（analytics.cost_line：单价×数量 / 总额）
+        import analytics as AN
+        _line = AN.cost_line(df, cost_col, qty_col, cost_force)
+        if _line is not None:
+            cost_total = float(_line.sum())
+            if rev_total:
+                margin = (rev_total - cost_total) / rev_total
 
     # ---- 期间 ----
     span = ""
@@ -314,7 +315,7 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
 
     # ================= 1. 封面 =================
     s = prs.slides.add_slide(prs.slide_layouts[6])
-    _rect(s, 0, 0, W, H, RGBColor(0xF7, 0xF9, 0xFC))
+    _rect(s, 0, 0, W, H, RGBColor(0xF7, 0xF4, 0xEE))
     _rect(s, 0, 0, 0.28, H, NAVY)
     _text(s, 1.0, 1.55, 10.5, 0.35, company or "月度经营回顾 · 数据分析", size=12, color=GRAY)
     _text(s, 1.0, 2.0, 10.8, 1.0, title, size=38, bold=True, color=DARK)
@@ -340,10 +341,12 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
             g = df.assign(_p=period_col)
             trend = g.groupby("_p")[metric].sum()
             if cost_col and cost_col in df.columns:
-                cc = _num(df[cost_col])
-                if cost_force != "total" and qty_col and qty_col in df.columns:
-                    cc = cc * _num(df[qty_col])
-                trend_profit = trend - cc.groupby(g["_p"]).sum()   # trend 是按期汇总的序列，不能再用 .sum()
+                import analytics as AN
+                _tline = AN.cost_line(df, cost_col, qty_col, cost_force)
+                if _tline is not None:
+                    trend_profit = trend - _tline.groupby(g["_p"]).sum()
+                else:
+                    trend_profit = None
             else:
                 trend_profit = None
 
@@ -355,12 +358,12 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
     cat_margin = None
     if big_col and big_col in df.columns and cost_col and cost_col in df.columns:
         try:
-            cc = _num(df[cost_col])
-            if cost_force != "total" and qty_col and qty_col in df.columns:
-                cc = cc * _num(df[qty_col])
-            g = df.assign(_c=cc).groupby(big_col).agg(rev=(metric, "sum"), cost=("_c", "sum"))
-            g = g[g["rev"] > 0]
-            cat_margin = (g["rev"] - g["cost"]) / g["rev"]
+            import analytics as AN
+            _cline = AN.cost_line(df, cost_col, qty_col, cost_force)
+            if _cline is not None:
+                g = df.assign(_c=_cline).groupby(big_col).agg(rev=(metric, "sum"), cost=("_c", "sum"))
+                g = g[g["rev"] > 0]
+                cat_margin = (g["rev"] - g["cost"]) / g["rev"]
         except Exception:
             pass
 
@@ -410,7 +413,7 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
             ("毛利", _fmt(rev_total - cost_total) if cost_total is not None else "—",
              "收入 − 成本", NAVY),
             ("毛利率", f"{margin*100:.1f}%" if margin is not None else "—",
-             "毛利 ÷ 收入", RGBColor(0x10, 0x7C, 0x10)),
+             "毛利 ÷ 收入", RGBColor(0x6F, 0x8A, 0x63)),
             ("销售数量", f"{qty_total:,.0f}", "件", ORANGE)]
     for i, (lab, v, sub, color) in enumerate(vals):
         _kpi_block(s, 0.6 + i * (cw + gap), 1.6, cw, lab, v, sub, color)
@@ -667,7 +670,7 @@ def build_deck(df, metric="金额", qty_col=None, cost_col=None, cost_force="aut
                     run.font.bold = (r == 0)
                     run.font.color.rgb = WHITE if r == 0 else DARK
             cell.fill.solid()
-            cell.fill.fore_color.rgb = NAVY if r == 0 else (WHITE if r % 2 else RGBColor(0xF7, 0xF9, 0xFC))
+            cell.fill.fore_color.rgb = NAVY if r == 0 else (WHITE if r % 2 else RGBColor(0xF7, 0xF4, 0xEE))
 
     # 注意：这里不要再放「数据质量」段落——它已经有单独一页，
     # 而且会和表格最后几行叠在一起（表格高度随行数变化）

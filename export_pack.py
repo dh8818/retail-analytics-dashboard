@@ -174,16 +174,17 @@ def build_pack(df, metric=None, qty_col=None, cost_col=None, cost_force="auto",
     rev_total = float(_num(d[metric]).sum()) if metric and metric in d.columns else 0.0
     cost_total, margin = None, None
     if cost_col and cost_col in d.columns and rev_total:
-        c = _num(d[cost_col])
-        if cost_force != "total" and qty_col and qty_col in d.columns:
-            c = c * _num(d[qty_col])
-        cost_total = float(c.sum())
-        # 成本列如果和金额同源（比如把"售价"当成本选了进来），毛利率会算成 0，
-        # 这种假数字比没有更糟，直接判为不可计算
-        if rev_total and abs(cost_total - rev_total) / rev_total < 0.005:
-            cost_total = None
-        else:
-            margin = (rev_total - cost_total) / rev_total
+        # 成本口径与全站同源（analytics.cost_line：单价×数量 / 总额）
+        import analytics as AN
+        line = AN.cost_line(d, cost_col, qty_col, cost_force)
+        if line is not None:
+            cost_total = float(line.sum())
+            # 成本列如果和金额同源（比如把"售价"当成本选了进来），毛利率会算成 0，
+            # 这种假数字比没有更糟，直接判为不可计算
+            if rev_total and abs(cost_total - rev_total) / rev_total < 0.005:
+                cost_total = None
+            else:
+                margin = (rev_total - cost_total) / rev_total
 
     try:
         adv = ADV.build_advice(d, metric, qty_col, cost_col, cost_force,
@@ -211,8 +212,11 @@ def build_pack(df, metric=None, qty_col=None, cost_col=None, cost_force="auto",
             rev = m[metric].sum()
             prof = None
             if cost_col and cost_col in d.columns:
-                cc = _num(d[cost_col]) * (_num(d[qty_col]) if cost_force != "total" and qty_col else 1)
-                prof = g.assign(_c=cc).groupby(g[date_col].dt.to_period("M"))["_c"].sum()
+                import analytics as AN
+                _line = AN.cost_line(d, cost_col, qty_col, cost_force)
+                if _line is not None:
+                    prof = g.assign(_c=_line.reindex(g.index)).groupby(
+                        g[date_col].dt.to_period("M"))["_c"].sum()
             if len(rev) >= 2:
                 profit = (rev - prof.reindex(rev.index).fillna(0)) if prof is not None else rev * 0
                 _try("01_月度趋势.png", PX.chart_trend, [str(i) for i in rev.index],
@@ -238,12 +242,14 @@ def build_pack(df, metric=None, qty_col=None, cost_col=None, cost_force="auto",
 
     if big_col and metric and cost_col and margin is not None:
         try:
-            cc = _num(d[cost_col]) * (_num(d[qty_col]) if cost_force != "total" and qty_col else 1)
-            t = d.assign(_c=cc).groupby(big_col).agg(_rev=(metric, "sum"), _cost=("_c", "sum"))
-            t = t[t._rev != 0]
-            ms = ((t._rev - t._cost) / t._rev).sort_values(ascending=False)
-            if len(ms) >= 2:
-                _try("04_品类毛利率.png", PX.chart_margin, [str(i) for i in ms.index], list(ms.values))
+            import analytics as AN
+            _line2 = AN.cost_line(d, cost_col, qty_col, cost_force)
+            if _line2 is not None:
+                t = d.assign(_c=_line2).groupby(big_col).agg(_rev=(metric, "sum"), _cost=("_c", "sum"))
+                t = t[t._rev != 0]
+                ms = ((t._rev - t._cost) / t._rev).sort_values(ascending=False)
+                if len(ms) >= 2:
+                    _try("04_品类毛利率.png", PX.chart_margin, [str(i) for i in ms.index], list(ms.values))
         except Exception:
             pass
 

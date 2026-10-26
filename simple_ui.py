@@ -28,7 +28,7 @@ TERMS = {
     "周转天数": "按现在的卖法，这批货要多少天才能卖完",
 }
 
-_LEVEL = {"高": "#B42318", "中": "#B54708", "低": "#067647"}
+_LEVEL = {"高": "#A84A42", "中": "#B9812F", "低": "#4F7A55"}
 
 
 def _money(v):
@@ -81,13 +81,14 @@ def _wechat_text(head, metrics, blocks, advice):
 
 
 def _period_cost(d, cost_col, qty_col, force="auto"):
-    """同一区间的成本：单价要乘数量，总额直接加。返回 None 表示算不了。"""
+    """同一区间的成本：口径与全站同源（单价×数量 / 总额）。返回 None 表示算不了。"""
     if not cost_col or cost_col not in d.columns:
         return None
-    c = _num(d[cost_col])
-    if force != "total" and qty_col and qty_col in d.columns:
-        c = c * _num(d[qty_col])
-    v = float(c.sum())
+    import analytics as AN
+    line = AN.cost_line(d, cost_col, qty_col, force)
+    if line is None:
+        return None
+    v = float(line.sum())
     return v if pd.notna(v) else None
 
 
@@ -107,7 +108,14 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
     prev_rev = float(_num(prev[metric]).sum()) if metric in prev else 0.0
     chg = (cur_rev / prev_rev - 1) * 100 if prev_rev else None
 
-    orders = int(cur[order_col].nunique()) if order_col and order_col in cur else 0
+    # 订单数：有订单号按去重；没有订单号列时，明细行就是一单（如每行唯一单号被
+    # 「唯一占比过高」保护拒认的场景），回退用行数并明确标注口径，不再显示「—」
+    if order_col and order_col in cur:
+        orders = int(cur[order_col].nunique())
+        orders_note = f"共 {orders:,} 单（{order_col} 去重）"
+    else:
+        orders = len(cur)
+        orders_note = f"共 {orders:,} 单（按明细行计，表里没有可用的订单号列）"
     aov = cur_rev / orders if orders else None
 
     # 毛利必须和收入是同一段时间，否则会出现「毛利比收入还大」
@@ -179,7 +187,7 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
         ("赚了多少（毛利）", _money(profit) if profit is not None else "算不了",
          "卖价减进货价，未扣房租人工" if profit is not None else "缺少进货成本列"),
         ("每卖 100 块赚", _pct(margin) if margin is not None else "—", "毛利率"),
-        ("平均每单", _money(aov), f"共 {orders:,} 单" if orders else ""),
+        ("平均每单", _money(aov), orders_note),
     ]
     st.markdown(
         "<style>.kpi4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 4px}"
@@ -203,7 +211,7 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
                         unsafe_allow_html=True)
             _ser = pd.Series(_daily.values, index=[str(d)[5:] for d in _daily.index],
                              name="每天销售额")   # 用 10-01 这种短标签，避免英文月份
-            st.bar_chart(_ser, height=210, color="#118DFF")
+            st.bar_chart(_ser, height=210, color="#C9744F")
             _best = _daily.idxmax()
             _worst = _daily.idxmin()
             st.caption(f"最好的一天是 {str(_best)}（{_money(float(_daily.max()))}），"
@@ -228,7 +236,7 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
             for title, body in leaks[:3]:
                 st.markdown(
                     f"<div class='sumcard' style='margin-bottom:8px'>"
-                    f"<div style='font-weight:600;font-size:13px;color:#B42318'>{title}</div>"
+                    f"<div style='font-weight:600;font-size:13px;color:#A84A42'>{title}</div>"
                     f"<div style='font-size:12.5px;margin-top:4px'>{body}</div></div>",
                     unsafe_allow_html=True)
         else:

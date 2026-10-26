@@ -265,6 +265,38 @@ check("缺成本时毛利为空", 1 if _vnc["毛利"] is None else 0, 1)
 _o, _e = SQ.run_sql(df, "SELECT * FROM read_csv('C:/Windows/win.ini')")
 check("SQL 不能读服务器文件", 1 if _o is None and _e else 0, 1)
 
+print("\n== 回归：单价成本/缺金额列（Sales Analysis Report 案例）==")
+# 案例：表里没有金额列，只有 数量/销售单价/销售单位成本。
+# 修复前：数量被当收入（6.76万）、单位成本被当总额求和（毛利 -1137万）。
+_case = pd.DataFrame({
+    "OrderNumber": ["O1", "O1", "O2"],
+    "订单日期": ["2017-01-01", "2017-01-01", "2017-01-02"],
+    "订单数量": [6, 11, 5],
+    "销售单价": [2499.1, 2351.7, 1728.6],
+    "销售单位成本": [1824.343, 1269.918, 1019.874],
+})
+# 1) 成本口径：「销售单位成本」必须识别为单价
+check("「销售单位成本」识别为单价", 1 if AN.cost_kind("销售单位成本") == "单价" else 0, 1)
+_cl = AN.cost_line(_case, "销售单位成本", "订单数量", "auto")
+_want_cost = float((_case["销售单位成本"] * _case["订单数量"]).sum())
+check("单位成本×数量求和", float(_cl.sum()), _want_cost, 1e-6)
+# 2) 单价语义但没有数量列：宁可不算，不能把单价求和当总额
+check("单价成本缺数量列时返回 None", 1 if AN.cost_line(_case, "销售单位成本", None, "auto") is None else 0, 1)
+# 3) 总额语义的成本列不被乘数量
+_case2 = _case.copy(); _case2["成本额"] = [100.0, 200.0, 50.0]
+check("总额成本不被乘数量", float(AN.cost_line(_case2, "成本额", "订单数量", "auto").sum()), 350.0, 1e-9)
+# 4) 缺金额列时派生销售额，pick_metric 应选中它而非数量
+_rev_hints = ("金额", "销售额", "营收", "收入", "成交额", "amount", "sales", "revenue", "gmv")
+_has_rev = any(any(h in str(c).lower() for h in _rev_hints) for c in _case.columns)
+check("案例表确认无金额列", 1 if not _has_rev else 0, 1)
+_case["销售额_计算"] = _case["订单数量"] * _case["销售单价"]
+# pick_metric 在 app.py 里（import 会执行整页，这里复刻其优先级逻辑做断言）
+_prio = ["销售额", "金额", "营收", "收入", "成交额", "amount", "sales", "revenue",
+         "gmv", "total", "利润", "毛利", "profit", "数量", "销量", "qty"]
+_numcols = list(_case.select_dtypes("number").columns)
+_picked = next((c for key in _prio for c in _numcols if key in str(c).lower()), _numcols[0])
+check("派生列被选为主指标（数量靠后）", 1 if _picked == "销售额_计算" else 0, 1)
+
 print("\n== 库存与订货 ==")
 import inventory as INV
 _sdf = pd.read_csv("data/pos.csv", encoding="utf-8-sig").head(20000)
@@ -276,7 +308,9 @@ _g = INV.sku_summary(_snap)
 check("报损率不超过 100%", 1 if _g["报损率%"].max() < 100 else 0, 1)
 _row = _g.iloc[0]
 _cover = int(_row.get("覆盖天数", 5) or 5)
-_target = _row["日均销量"] * _cover + _row["日均销量"] * _row["交货周期"] * 0.5
+# 订货公式已增强：目标库存 = 日均×覆盖 + 交期需求 + 动态安全库存（可从汇总表直接读）
+_ss = float(_row.get("安全库存", 0.0) or 0.0)
+_target = _row["日均销量"] * _cover + _row["日均销量"] * _row["交货周期"] * 0.5 + _ss
 _expect = max(0.0, _target - _row["库存位置"])
 if _row["保质期"] <= 3:                      # 鲜食按保质期封顶
     _expect = min(_expect, _row["日均销量"] * _row["保质期"] * 0.8)

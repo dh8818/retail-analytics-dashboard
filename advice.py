@@ -8,6 +8,8 @@ severity（高/中/低）、依据、动作、预期影响（粗估，不是承�
 import numpy as np
 import pandas as pd
 
+import analytics as AN
+
 
 def _num(s):
     return pd.to_numeric(s, errors="coerce")
@@ -66,13 +68,11 @@ def build_advice(df, metric, qty_col=None, cost_col=None, cost_force="auto",
     # ---------- 1. 毛利率 ----------
     margin = None
     if cost_col and cost_col in df.columns:
-        if cost_force == "unit" or (cost_force == "auto" and any(
-                h in str(cost_col) for h in ("进价", "进货价", "单价"))):
-            cost = float((_num(df[cost_col]) * _num(df[qty_col])).sum()) if qty_col and qty_col in df.columns \
-                else float(_num(df[cost_col]).sum())
-        else:
-            cost = float(_num(df[cost_col]).sum())
-        if rev:
+        # 统一走 analytics.cost_line：口径判断（单价/总额）与全站同源，
+        # 避免「销售单位成本」这类列名被当总额直接求和、毛利错一个数量级
+        line = AN.cost_line(df, cost_col, qty_col, cost_force)
+        cost = float(line.sum()) if line is not None else None
+        if cost is not None and rev:
             margin = (rev - cost) / rev
     if margin is not None:
         if margin < 0.25:
@@ -238,21 +238,23 @@ def build_advice(df, metric, qty_col=None, cost_col=None, cost_force="auto",
     # ---------- 9. 品类结构 ----------
     if big_col and big_col in df.columns and cost_col:
         try:
-            g = df.groupby(big_col).apply(
-                lambda x: pd.Series({"rev": _num(x[metric]).sum(),
-                                     "cost": (_num(x[cost_col]) * _num(x[qty_col])).sum()
-                                     if qty_col and qty_col in x.columns and cost_force != "total"
-                                     else _num(x[cost_col]).sum()}), include_groups=False)
-            g["margin"] = (g["rev"] - g["cost"]) / g["rev"].replace(0, np.nan)
-            g = g.dropna().sort_values("rev", ascending=False)
-            if len(g) >= 2:
-                worst = g["margin"].idxmin()
-                share = _pct(float(g.loc[worst, "rev"]), float(g["rev"].sum()))
-                if g.loc[worst, "margin"] < 0.2 and share > 0.1:
-                    add("中", f"「{worst}」占了 {share:.0f}% 的收入，但毛利率只有 {g.loc[worst,'margin']*100:.1f}%",
-                        f"这一块毛利 {g.loc[worst,'rev']-g.loc[worst,'cost']:,.0f}。",
-                        "它拉量但不赚钱：要么提价 2%~3% 试水，要么把它当引流品、把利润压在高毛利品类上。",
-                        f"这块毛利率提到 25%，大约多赚 {(g.loc[worst,'rev']*0.25 - (g.loc[worst,'rev']-g.loc[worst,'cost'])):,.0f}。")
+            # 成本口径与全站同源（单价×数量 / 总额），不用内联判断
+            _cline = AN.cost_line(df, cost_col, qty_col, cost_force)
+            if _cline is not None:
+                g = df.groupby(big_col).apply(
+                    lambda x: pd.Series({"rev": _num(x[metric]).sum(),
+                                         "cost": _cline.loc[x.index].sum()}),
+                    include_groups=False)
+                g["margin"] = (g["rev"] - g["cost"]) / g["rev"].replace(0, np.nan)
+                g = g.dropna().sort_values("rev", ascending=False)
+                if len(g) >= 2:
+                    worst = g["margin"].idxmin()
+                    share = _pct(float(g.loc[worst, "rev"]), float(g["rev"].sum()))
+                    if g.loc[worst, "margin"] < 0.2 and share > 0.1:
+                        add("中", f"「{worst}」占了 {share:.0f}% 的收入，但毛利率只有 {g.loc[worst,'margin']*100:.1f}%",
+                            f"这一块毛利 {g.loc[worst,'rev']-g.loc[worst,'cost']:,.0f}。",
+                            "它拉量但不赚钱：要么提价 2%~3% 试水，要么把它当引流品、把利润压在高毛利品类上。",
+                            f"这块毛利率提到 25%，大约多赚 {(g.loc[worst,'rev']*0.25 - (g.loc[worst,'rev']-g.loc[worst,'cost'])):,.0f}。")
         except Exception:
             pass
 

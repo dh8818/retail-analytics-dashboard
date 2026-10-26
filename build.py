@@ -18,12 +18,12 @@ DATA = BASE / "data"
 OUT = BASE / "output"
 OUT.mkdir(exist_ok=True)
 
-# ---------------- Power BI 配色 ----------------
-BI_BLUE, BI_NAVY = "#118DFF", "#12239E"
-PALETTE = ["#118DFF", "#12239E", "#E66C37", "#6B007B", "#E044A7",
-           "#744EC2", "#D9B300", "#D64550"]
-CARD_BG, PAGE_BG, TEXT, MUTED, GRID = "#FFFFFF", "#F3F2F1", "#252423", "#605E5C", "#EDEBE9"
-FONT = "Segoe UI, Microsoft YaHei, sans-serif"
+# ---------------- 暖陶土配色（与主看板一致） ----------------
+BI_BLUE, BI_NAVY = "#C9744F", "#B85532"
+PALETTE = ["#B85532", "#3F382D", "#6F8A63", "#C08A3E",
+           "#5F7A96", "#8E6B7C", "#4E7E7A", "#9A9084"]
+CARD_BG, PAGE_BG, TEXT, MUTED, GRID = "#FFFFFF", "#F7F4EE", "#1A1A1A", "#6E685E", "#E8E2D8"
+FONT = 'system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
 
 # ---------------- 数据 ----------------
 pos = pd.read_csv(DATA / "pos.csv", encoding="utf-8-sig")
@@ -77,9 +77,9 @@ daily["7日均线"] = daily["金额"].rolling(7, min_periods=1).mean()
 f_trend = go.Figure()
 f_trend.add_trace(go.Scatter(x=daily["日期"], y=daily["金额"], name="日销售额",
                              mode="lines", line=dict(color=BI_BLUE, width=1.2),
-                             fill="tozeroy", fillcolor="rgba(17,141,255,0.10)"))
+                             fill="tozeroy", fillcolor="rgba(201,116,79,0.10)"))
 f_trend.add_trace(go.Scatter(x=daily["日期"], y=daily["7日均线"], name="7日均线",
-                             mode="lines", line=dict(color="#E66C37", width=2.6, dash="solid")))
+                             mode="lines", line=dict(color="#C08A3E", width=2.6, dash="solid")))
 fig_base(f_trend, 320, f"日销售额与 7 日均线（{D_START:%m-%d} ~ {D_END:%m-%d}）")
 f_trend.update_layout(showlegend=True,
                       legend=dict(orientation="h", y=1.06, x=1, xanchor="right",
@@ -104,8 +104,8 @@ pivot = pos.pivot_table(index="星期", columns="小时", values="金额", aggfu
 week_order = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 pivot = pivot.reindex([w for w in week_order if w in pivot.index])
 f_heat = go.Figure(go.Heatmap(z=pivot.values, x=[f"{h}时" for h in pivot.columns], y=pivot.index,
-                              colorscale=[[0, "#F3F9FF"], [0.35, "#9CC9FF"],
-                                          [0.7, "#118DFF"], [1, "#12239E"]],
+                              colorscale=[[0, "#FBF7F0"], [0.35, "#E7C8B4"],
+                                          [0.7, "#C9744F"], [1, "#3F382D"]],
                               hovertemplate="%{y} %{x}<br>销售额 ¥%{z:,.0f}<extra></extra>",
                               colorbar=dict(thickness=8, len=0.8, tickfont=dict(size=10, color=MUTED))))
 f_heat.update_xaxes(showgrid=False)
@@ -117,13 +117,13 @@ sku["累计占比"] = sku["金额"].cumsum() / sku["金额"].sum()
 sku["等级"] = sku["累计占比"].apply(lambda x: "A" if x <= 0.7 else ("B" if x <= 0.9 else "C"))
 top = sku.head(18)
 f_abc = go.Figure()
-color_map = {"A": BI_BLUE, "B": "#744EC2", "C": "#C8C6C4"}
+color_map = {"A": BI_BLUE, "B": "#5F7A96", "C": "#C6BCAF"}
 f_abc.add_trace(go.Bar(x=top["名称"], y=top["金额"], name="销售额",
                        marker=dict(color=[color_map[c] for c in top["等级"]]),
                        hovertemplate="%{x}<br>销售额 ¥%{y:,.0f}<extra></extra>"))
 f_abc.add_trace(go.Scatter(x=top["名称"], y=top["累计占比"] * 100, name="累计占比",
                            mode="lines+markers", yaxis="y2",
-                           line=dict(color="#E66C37", width=2.2), marker=dict(size=4)))
+                           line=dict(color="#C08A3E", width=2.2), marker=dict(size=4)))
 f_abc.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105],
                                 showgrid=False, ticksuffix="%",
                                 tickfont=dict(size=11, color=MUTED)),
@@ -258,14 +258,14 @@ html = f"""<!DOCTYPE html>
   .bi-table {{ width:100%; border-collapse:collapse; font-size:12.5px; }}
   .bi-table th {{ text-align:left; color:{MUTED}; font-weight:600; font-size:11.5px;
                  padding:8px 8px; border-bottom:1px solid {GRID}; white-space:nowrap; }}
-  .bi-table td {{ padding:7px 8px; border-bottom:1px solid #F7F6F5; }}
+  .bi-table td {{ padding:7px 8px; border-bottom:1px solid #F0EBE3; }}
   .bi-table td.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
-  .bi-table tr:hover td {{ background:#F8FBFF; }}
+  .bi-table tr:hover td {{ background:#F7F2EA; }}
   .badge {{ display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; }}
-  .b-red {{ background:#FDE7E9; color:#A4262C; }}
-  .b-orange {{ background:#FEE9E1; color:#8A3707; }}
-  .b-yellow {{ background:#FFF4CE; color:#6A5400; }}
-  .b-blue {{ background:#EAF3FF; color:#0B5CAB; }}
+  .b-red {{ background:#F6E3DE; color:#A84A42; }}
+  .b-orange {{ background:#F7EDD6; color:#B9812F; }}
+  .b-yellow {{ background:#F7EDD6; color:#B9812F; }}
+  .b-blue {{ background:#F6EBE3; color:#B85532; }}
   @media (max-width:900px) {{ .c8,.c6,.c4 {{ grid-column:span 12; }} }}
   .foot {{ text-align:center; color:{MUTED}; font-size:11px; margin-top:22px; }}
 </style></head>
@@ -277,11 +277,11 @@ html = f"""<!DOCTYPE html>
 <div class="wrap">
   <div class="kpis">
     {kpi_card("总销售额", f"¥{sales/10000:.2f}万", f"日均 ¥{daily_avg:,.0f}")}
-    {kpi_card("毛利额", f"¥{profit/10000:.2f}万", f"毛利率 {margin*100:.1f}%", "#107C10")}
+    {kpi_card("毛利额", f"¥{profit/10000:.2f}万", f"毛利率 {margin*100:.1f}%", "#4F7A55")}
     {kpi_card("订单数", f"{orders:,}", f"件单价 ¥{sales/items:.2f}")}
     {kpi_card("客单价", f"¥{aov:.2f}", "行业参考 8~12 元")}
     {kpi_card("周环比", f"{wow:+.1f}%", f"近7天 ¥{last7/10000:.2f}万",
-              "#107C10" if wow >= 0 else "#A4262C")}
+              "#4F7A55" if wow >= 0 else "#A84A42")}
     {kpi_card("在售 SKU", f"{prod.shape[0]}", f"A 类 {int((sku['等级']=='A').sum())} 个贡献 70%")}
   </div>
 

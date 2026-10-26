@@ -20,6 +20,42 @@ def _num(s):
     return pd.to_numeric(s, errors="coerce")
 
 
+def _robust_std(x, drop_outliers=True):
+    """稳健标准差：先按 MAD 剔掉极端日（缺货日/大促单），再算样本标准差。
+
+    生鲜这类波动大的品类，直接用普通 std 会被个别大单拉爆，导致安全库存
+    虚高、多订货；用 MAD 剔除后再估，波动估计更稳。
+    """
+    v = np.asarray(x, dtype=float)
+    v = v[np.isfinite(v)]
+    if len(v) < 3:
+        return 0.0, float(np.median(v)) if len(v) else 0.0
+    med = np.median(v)
+    mad = np.median(np.abs(v - med))
+    if mad > 0 and drop_outliers:
+        z = 0.6745 * (v - med) / mad
+        v = v[np.abs(z) <= 3.5]           # 只剔真极端，不伤正常波动
+    if len(v) < 2:
+        return 0.0, float(med)
+    return float(np.std(v, ddof=1)), float(np.mean(v))
+
+
+def safety_stock(daily_sales, lead_days, z=1.65, cap_ratio=2.0):
+    """动态安全库存：SS = z × σ_daily × √lead。
+
+    - daily_sales: 该 SKU 的日销量序列（一维数组）
+    - lead_days: 交货周期（天）
+    - z: 服务水平系数（1.65 ≈ 95% 不缺货；2.33 ≈ 99%）
+    - cap_ratio: 安全库存上限，按「日均×覆盖」的倍数封顶，防生鲜波动大时订过头
+    返回 (safety_stock 值, 日均销量稳健估计)。
+    """
+    sigma, avg = _robust_std(daily_sales)
+    ss = z * sigma * np.sqrt(max(lead_days, 1))
+    # 生鲜波动再大，安全库存也别超过「覆盖期内平均需求」的一定倍数，避免压货
+    cap = max(avg, 1e-9) * max(lead_days, 1) * cap_ratio
+    return float(min(ss, cap)), float(avg)
+
+
 def _shelf_for(cat, rng):
     """保质期按品类推断：鲜食 2-3 天、乳品 7-15 天、饮料 半年以上。"""
     c = str(cat)
@@ -152,11 +188,22 @@ def sku_summary(snap):
     g["缺货率%"] = (g["缺货天数"] / g["天数"].replace(0, np.nan) * 100).round(1)
     g["报损率%"] = (g["报损"] / g["销量"].replace(0, np.nan) * 100).round(1)
     g["库存金额"] = (g["期末库存"] * g["单位成本"]).round(2)
+
+    # ---- 动态安全库存（增强）：用每个 SKU 的日销量波动算 SS = z·σ·√lead ----
+    # 比固定「交期×0.5」更贴近真实：波动大的 SKU 安全库存更高，波动小的更低。
+    ss_map = {}
+    for sku, sub in snap.groupby("商品编码"):
+        ss, _avg = safety_stock(sub["销量"].to_numpy(), float(sub["交货周期"].iloc[-1]))
+        ss_map[sku] = ss
+    g["安全库存"] = g["商品编码"].map(ss_map).fillna(0.0)
+
     # 建议订货再按最新库存位置复核一次，保证公式可核对：
-    # 目标库存 = 日均 × 该 SKU 覆盖天数 + 交期需求；鲜食再按保质期封顶
+    # 目标库存 = 日均 × 覆盖天数 + 交期需求 + 动态安全库存；鲜食按保质期封顶
     cover = (g["覆盖天数"].fillna(5) if "覆盖天数" in g
              else pd.Series(5.0, index=g.index))
-    target = g["日均销量"] * cover + g["日均销量"] * g["交货周期"] * 0.5
+    target = (g["日均销量"] * cover
+              + g["日均销量"] * g["交货周期"] * 0.5
+              + g["安全库存"])
     order = (target - g["库存位置"]).clip(lower=0)
     fresh = g["保质期"] <= 3
     if fresh.any():
@@ -169,9 +216,11 @@ def sku_summary(snap):
 def reorder_explain(row):
     """把一只 SKU 的订货计算摊开成文字。"""
     _cover = int(row.get("覆盖天数", 5) or 5)
-    target = round(row["日均销量"] * _cover + row["日均销量"] * row["交货周期"] * 0.5, 1)
+    ss = float(row.get("安全库存", 0.0) or 0.0)
+    target = round(row["日均销量"] * _cover + row["日均销量"] * row["交货周期"] * 0.5 + ss, 1)
+    ss_txt = f" + 安全库存 {ss:.1f}" if ss > 0 else ""
     return (f"日均销量 {row['日均销量']:.1f} × 覆盖 {_cover} 天 + 交期 {row['日均销量']*row['交货周期']*0.5:.1f}"
-            f" = 目标库存 {target:.1f}；现有库存位置 {row['库存位置']:.1f}"
+            f"{ss_txt} = 目标库存 {target:.1f}；现有库存位置 {row['库存位置']:.1f}"
             f"（期末 {row['期末库存']:.1f} + 在途 {row['在途']:.1f}）；"
             f"建议订货 {row['建议订货']:.1f}" + (f"（保质期 {row['保质期']} 天，不能多订）" if row["保质期"] <= 3 else ""))
 

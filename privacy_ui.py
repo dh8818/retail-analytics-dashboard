@@ -35,12 +35,12 @@ def render(compact=False):
 
     if mode == "local":
         st.markdown(
-            "<div class='insight' style='border-left-color:#548235'>"
+            "<div class='insight' style='border-left-color:#6F8A63'>"
             "<b>当前是本地运行</b>：数据只在你自己的电脑内存里，<b>没有离开过这台机器</b>，"
             "关掉页面就释放。断网也能用。</div>", unsafe_allow_html=True)
     elif mode == "cloud":
         st.markdown(
-            "<div class='insight' style='border-left-color:#C55A11'>"
+            "<div class='insight' style='border-left-color:#B9812F'>"
             "<b>当前是云端运行</b>（*.streamlit.app）：文件会通过 HTTPS 上传到 Streamlit 的服务器，"
             "在那台服务器的内存里完成计算，再把图表传回你的浏览器。<br>"
             "本应用不落盘、不外发、不调用外部 API，但<b>「数据没有离开服务器」这一点取决于托管平台</b>。"
@@ -65,8 +65,8 @@ def render(compact=False):
 def badge():
     """标题旁边的小标签，一眼看到当前是本地还是云端。"""
     mode = where_am_i()
-    text, color = {"local": ("本地运行 · 数据不出机器", "#548235"),
-                   "cloud": ("云端运行 · 见「数据与口径」隐私说明", "#C55A11")}.get(
+    text, color = {"local": ("本地运行 · 数据不出机器", "#6F8A63"),
+                   "cloud": ("云端运行 · 见「数据与口径」隐私说明", "#B9812F")}.get(
         mode, ("运行位置未知", MUTED))
     st.markdown(f"<span style='display:inline-block;font-size:11.5px;color:#fff;background:{color};"
-                f"padding:3px 9px;border-radius:2px'>{text}</span>", unsafe_allow_html=True)
+                f"padding:3px 10px;border-radius:6px'>{text}</span>", unsafe_allow_html=True)

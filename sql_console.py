@@ -4,6 +4,7 @@
 只允许 SELECT / WITH，DDL、DML、ATTACH 等一律拦掉；结果行数封顶，避免把浏览器拖死。
 """
 import re
+from datetime import datetime
 
 import duckdb
 import pandas as pd
@@ -15,8 +16,18 @@ from style import MUTED, TEXT, BI_NAVY
 
 TABLE = "t"
 MAX_ROWS = 5000
+# 写操作关键字：直接拦。注意不要只靠关键字——字符串里出现这些词会被 _strip_literals 清掉，
+# 这里拦的是「代码骨架」里真的出现了这些语句。
 _BLOCKED = re.compile(
-    r"\b(insert|update|delete|drop|alter|create|truncate|attach|detach|copy|export|import|install|load|pragma)\b",
+    r"\b(insert|update|delete|drop|alter|create|truncate|attach|detach|copy|export|import|install|load|pragma|call|set|reset|begin|commit|rollback|vacuum|checkpoint)\b",
+    re.I)
+
+# 文件 / 外部访问函数：即使 disabled_filesystems 关了 LocalFileSystem，
+# DuckDB 仍可能通过 httpfs / 其它扩展读外部资源，这里从 SQL 文本层面直接拒绝。
+_FILE_FUNCS = re.compile(
+    r"\b(read_csv|read_csv_auto|read_parquet|read_json|read_json_auto|read_ndjson|read_text"
+    r"|read_blob|read_iceberg|read_delta|read_xlsx|glob|parquet_scan|parquet_schema|query_table"
+    r"|duckdb_databases|duckdb_tables|duckdb_extensions)\b",
     re.I)
 
 
@@ -29,6 +40,15 @@ def _strip_literals(q):
     return q
 
 
+def _statements(q):
+    """把输入按「语句边界」拆开，拒绝多语句。只按分号拆会误伤字符串里的分号，
+    这里先剥掉字符串与注释，只对剩余骨架里的分号做判断。"""
+    body = _strip_literals(q)
+    # 去掉末尾分号后，骨架里不应再出现分号
+    stripped = body.strip().rstrip(";").strip()
+    return ";" in stripped
+
+
 def run_sql(df, sql, limit=MAX_ROWS):
     """执行一条只读 SQL，返回 (结果 DataFrame, 错误信息)。"""
     q = (sql or "").strip().rstrip(";").strip()
@@ -36,13 +56,21 @@ def run_sql(df, sql, limit=MAX_ROWS):
         return None, "SQL 是空的"
     if not re.match(r"^(select|with)\b", q, re.I):
         return None, "只允许 SELECT / WITH 查询"
-    if _BLOCKED.search(_strip_literals(q)):
+    skeleton = _strip_literals(q)
+    if _BLOCKED.search(skeleton):
         return None, "检测到写操作关键字，这里只接受只读查询"
+    if _FILE_FUNCS.search(skeleton):
+        return None, "不允许读取外部文件或查询数据库元信息"
+    if _statements(q):
+        return None, "一次只允许执行一条查询"
     con = duckdb.connect()
     try:
         # 关键：禁用本地文件系统，防止 SELECT read_csv('任意路径') 读到服务器文件
         # （这个设置必须在连接建立之后、查询之前执行）
         con.execute("SET disabled_filesystems='LocalFileSystem'")
+        # 限制单条查询的内存与线程，防止一个超大的 JOIN 把服务器内存打爆
+        con.execute("SET memory_limit='512MB'")
+        con.execute("SET threads=2")
         con.register(TABLE, df)
         out = con.execute(q).fetchdf()
     except Exception as e:
@@ -108,7 +136,7 @@ def render_sql(df):
             try:
                 import plotly.express as px
                 x = next((c for c in res.columns if c not in nums), res.columns[0])
-                fig = px.bar(res.head(30), x=x, y=nums[0], color_discrete_sequence=["#1F3864"])
+                fig = px.bar(res.head(30), x=x, y=nums[0], color_discrete_sequence=["#B85532"])
                 fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10),
                                   paper_bgcolor="#fff", plot_bgcolor="#fff",
                                   font=dict(family="Microsoft YaHei, sans-serif", size=12))
@@ -116,7 +144,8 @@ def render_sql(df):
             except Exception:
                 pass
         st.download_button("下载结果 CSV", res.to_csv(index=False).encode("utf-8-sig"),
-                           file_name="query_result.csv", mime="text/csv", key="sql_dl")
+                           file_name=f"query_result_{datetime.now():%Y%m%d_%H%M%S}.csv",
+                           mime="text/csv", key="sql_dl")
 
 
 def render_ask(df, schema):
@@ -179,7 +208,7 @@ def render_ask(df, schema):
         try:
             import plotly.express as px
             x = next((c for c in out.columns if c not in nums), out.columns[0])
-            fig = px.bar(out.head(30), x=x, y=nums[0], color_discrete_sequence=["#1F3864"],
+            fig = px.bar(out.head(30), x=x, y=nums[0], color_discrete_sequence=["#B85532"],
                          text=nums[0])
             fig.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
             fig.update_layout(height=340, margin=dict(l=10, r=10, t=20, b=10),
@@ -190,4 +219,5 @@ def render_ask(df, schema):
             pass
 
     st.download_button("下载结果 CSV", out.to_csv(index=False).encode("utf-8-sig"),
-                       file_name="问数结果.csv", mime="text/csv", key="ask_dl")
+                       file_name=f"问数结果_{datetime.now():%Y%m%d_%H%M%S}.csv",
+                       mime="text/csv", key="ask_dl")

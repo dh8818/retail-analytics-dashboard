@@ -6,7 +6,7 @@ import streamlit as st
 import cleaning as CL
 from style import MUTED
 
-_LEVEL_COLOR = {"高": "#D64550", "中": "#C55A11", "低": "#548235"}
+_LEVEL_COLOR = {"高": "#A84A42", "中": "#B9812F", "低": "#6F8A63"}
 
 # 安全预设：只做「不会改错业务含义」的动作
 SAFE = {"drop_dupes": True, "strip_text": True, "to_number": True, "to_date": True,

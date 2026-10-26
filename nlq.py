@@ -47,6 +47,12 @@ def _q(name):
     return '"' + str(name).replace('"', '""') + '"'
 
 
+def _sql_str(v):
+    """把维度取值安全地包成 SQL 字符串字面量。值来自用户上传的数据，
+    可能含单引号，不转义会破坏 SQL 甚至造成注入。"""
+    return "'" + str(v).replace("'", "''") + "'"
+
+
 def _find_col(cols, hints, exclude=()):
     for h in hints:
         for c in cols:
@@ -251,7 +257,7 @@ def to_sql(question, s):
     filter_txt = ""
     if val and dim_col:
         # 同时按这个维度分组又要筛它 -> 说明用户想筛别的维度，交给 WHERE 不分组
-        where.append(f"{_q(dim_col)} = '{val}'")
+        where.append(f"{_q(dim_col)} = {_sql_str(val)}")
         filter_txt = f"{dim_txt} = {val}"
         dim_sql, dim_txt = None, None
 
