@@ -33,6 +33,13 @@ import timefix
 import privacy_ui as PV
 import inventory_ui as IVU
 import review_ui as RVU
+try:
+    # 云端热重载只 rerun 脚本、不重新 import 模块，模块缓存会让 review_ui 停在旧版；
+    # 这里显式 reload，保证每次运行都用磁盘上的最新代码。
+    import importlib as _importlib
+    _importlib.reload(RVU)
+except Exception:
+    pass
 import cleaning_ui as CU
 import cleaning as CL
 AU = None
