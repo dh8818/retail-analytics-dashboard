@@ -2020,7 +2020,8 @@ if _sec == "客户与归因":
 # ---------------- 数据与口径 ----------------
 if _sec == "行动复盘":
     _rv_base = f"收入 {fmt(_sales)}" + (f" ｜ 毛利率 {_margin:.1f}%" if _margin is not None else "")
-    RVU.render(_adv, base_text=_rv_base)
+    _rv_ctx = RVU._build_ctx(df, metric, _qty_c0, _cost_c0, big, detail, _sales, _margin)
+    RVU.render(_adv, base_text=_rv_base, ctx=_rv_ctx)
 
 if _sec == "SQL 查询":
     _nlq_schema = nlq.build_schema(df, metric=metric, qty=qty_c, date=dc,

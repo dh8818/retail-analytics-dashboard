@@ -13,10 +13,155 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from style import MUTED
+from style import MUTED, fmt
 
 _COLS = ["日期", "问题", "采取的动作", "负责人", "预期效果", "基准指标", "实际结果", "状态"]
 _STATUS = ["待开始", "进行中", "已完成", "已放弃"]
+
+# 场景关键词：用来判断这一行属于哪类经营动作，预期就按哪套口径推。
+# 顺序有讲究：越具体的场景越靠前，"促销"最宽泛（活动/折扣），放最后兜底。
+_SCENE_RULES = [
+    ("缺货", ("缺货", "断货", "断订", "补货", "安全库存", "物流")),
+    ("调价", ("调价", "提价", "降价", "涨价", "定价")),
+    ("新品", ("新品", "上架", "动销率", "新进", "试销")),
+    ("滞销", ("滞销", "清货", "临期", "报损", "周转", "积压", "库存")),
+    ("排班", ("排班", "人力", "高峰", "时段", "人手", "班表", "客流")),
+    ("陈列", ("陈列", "货架", "连带", "关联", "捆绑", "位置", "黄金位")),
+    ("促销", ("促销", "折扣", "满减", "活动", "买赠", "特价", "试吃")),
+]
+
+
+def _detect_scene(text):
+    """按关键词判断行动类型；都不命中就走通用口径。"""
+    for name, kws in _SCENE_RULES:
+        if any(k in text for k in kws):
+            return name
+    return "通用"
+
+
+def _agg(sub, metric, qty_col, cost_col):
+    """一小批行的销售额 / 销量 / 毛利率。"""
+    rev = 0.0
+    if metric and metric in sub.columns:
+        rev = float(pd.to_numeric(sub[metric], errors="coerce").sum())
+    qty = float(len(sub))
+    if qty_col and qty_col in sub.columns:
+        qty = float(pd.to_numeric(sub[qty_col], errors="coerce").sum())
+    m = None
+    if cost_col and cost_col in sub.columns and rev:
+        try:
+            import analytics as AN
+            line = AN.cost_line(sub, cost_col, qty_col, "auto")
+            if line is not None:
+                m = (rev - float(line.sum())) / rev * 100
+        except Exception:
+            pass
+    return rev, qty, m
+
+
+def _match_objects(text, ctx):
+    """从这一行的文字里，找出数据中真实存在的商品名 / 品类名。"""
+    items, cates = [], []
+    for v in ctx.get("items", []):
+        if len(v) >= 2 and v in text:
+            items.append(v)
+    for v in ctx.get("cates", []):
+        if len(v) >= 2 and v in text:
+            cates.append(v)
+    return items, cates
+
+
+def infer_row(row, ctx):
+    """按一行「问题 / 采取的动作」的文字，从数据推算它的基准指标与预期效果。
+
+    优先落到具体商品，其次品类，最后才是全店——这样每行的数字都跟着自己的
+    内容走，不会几行全是同一个「全店收入 / 毛利率」。
+    """
+    df = ctx.get("df")
+    metric = ctx.get("metric")
+    qty_col = ctx.get("qty")
+    cost_col = ctx.get("cost")
+    big_col = ctx.get("big")
+    detail_col = ctx.get("detail")
+
+    text = (f"{row.get('问题', '')} {row.get('采取的动作', '')}").strip()
+    if not text.strip():
+        return row.get("基准指标", ""), row.get("预期效果", "")
+
+    scene = _detect_scene(text)
+    items, cates = _match_objects(text, ctx)
+
+    rev = qty = None
+    obj_m = ctx.get("margin")
+    if df is not None and items and detail_col in df.columns:
+        sub = df[df[detail_col].astype(str).isin(items)]
+        rev, qty, obj_m = _agg(sub, metric, qty_col, cost_col)
+        base = f"{'、'.join(items[:2])}：销售额 {fmt(rev)}，销量 {qty:,.0f} 件"
+        if obj_m is not None:
+            base += f"，毛利率 {obj_m:.1f}%"
+    elif df is not None and cates and big_col in df.columns:
+        sub = df[df[big_col].astype(str).isin(cates)]
+        rev, qty, obj_m = _agg(sub, metric, qty_col, cost_col)
+        share = rev / ctx["sales"] * 100 if ctx.get("sales") else 0
+        base = f"{'、'.join(cates[:2])}：销售额 {fmt(rev)}，占比 {share:.1f}%"
+        if obj_m is not None:
+            base += f"，毛利率 {obj_m:.1f}%"
+    else:
+        rev = ctx.get("sales") or 0
+        base = f"全店：收入 {fmt(rev)}"
+        if ctx.get("margin") is not None:
+            base += f"，毛利率 {ctx['margin']:.1f}%"
+
+    gm = obj_m if obj_m is not None else ctx.get("margin")
+    if scene == "促销":
+        exp = (f"活动期销量提升 20%（约 {qty*1.2:,.0f} 件）" if qty
+               else "活动期销量比活动前提升 20% 以上")
+        if gm is not None:
+            exp += f"，毛利率不低于 {gm-3:.1f}%"
+    elif scene == "缺货":
+        exp = "缺货天数降为 0，次月不再出现同因缺货"
+    elif scene == "调价":
+        exp = (f"毛利额不下降，销量波动 ±10%（约 {qty*0.9:,.0f}~{qty*1.1:,.0f} 件）" if qty
+               else "毛利额不下降的前提下，销量波动在 ±10% 以内")
+    elif scene == "新品":
+        exp = ("上架 2 周内动销率 ≥50%" + (f"（约 {qty*0.5:,.0f} 件）" if qty else "")
+               + "，周转天数不超过品类平均")
+    elif scene == "滞销":
+        exp = "4 周内清掉 70% 滞销库存，报损率不上升"
+    elif scene == "排班":
+        exp = "高峰时段客单转化不下降，人力成本下降 5%~10%"
+    elif scene == "陈列":
+        exp = "关联商品连带率提升 10%~20%"
+    else:
+        exp = "关键指标（收入 / 毛利率）不低于当前水平"
+    return base, exp
+
+
+def _refresh_auto(df, ctx):
+    """把每一行的基准 / 预期按当前文字重算一遍（幂等，可反复调用）。"""
+    if ctx is None or df is None or df.empty:
+        return df
+    d = df.copy()
+    for i in d.index:
+        if str(d.at[i, "问题"]).strip() or str(d.at[i, "采取的动作"]).strip():
+            base, exp = infer_row(d.loc[i], ctx)
+            d.at[i, "基准指标"] = base
+            d.at[i, "预期效果"] = exp
+    return d
+
+
+def _build_ctx(df, metric, qty, cost, big, detail, sales, margin):
+    """提前把商品 / 品类清单抽出来，避免每行都去重扫全表。"""
+    items = []
+    cates = []
+    if df is not None:
+        if detail and detail in df.columns:
+            items = [str(v).strip() for v in df[detail].dropna().astype(str).unique()]
+        if big and big in df.columns:
+            cates = [str(v).strip() for v in df[big].dropna().astype(str).unique()]
+    return {"df": df, "metric": metric, "qty": qty, "cost": cost,
+            "big": big, "detail": detail, "sales": sales, "margin": margin,
+            "items": items, "cates": cates}
 
 
 def _nonempty(df):
@@ -34,14 +179,18 @@ def _store():
     return st.session_state["_actions"]
 
 
-def from_advice(adv_list, base_text=""):
+def from_advice(adv_list, base_text="", ctx=None):
     """把改善建议转成行动项（问题 + 预期 + 基准指标自动填好）。"""
     rows = []
     for a in adv_list[:5]:
+        if ctx:
+            base, exp = infer_row({"问题": a["title"], "采取的动作": a["action"]}, ctx)
+        else:
+            base, exp = base_text, a["impact"]
         rows.append({"日期": str(date.today()), "问题": a["title"],
                      "采取的动作": a["action"], "负责人": "",
-                     "预期效果": a["impact"],
-                     "基准指标": base_text,
+                     "预期效果": exp,
+                     "基准指标": base,
                      "实际结果": "", "状态": "待开始"})
     return pd.DataFrame(rows, columns=_COLS)
 
@@ -86,12 +235,16 @@ SCENARIOS = {
 }
 
 
-def from_scenario(name, base_text=""):
+def from_scenario(name, base_text="", ctx=None):
     """把场景模板转成一条行动项。"""
     s = SCENARIOS[name]
+    if ctx:
+        base, exp = infer_row({"问题": s["问题"], "采取的动作": s["采取的动作"]}, ctx)
+    else:
+        base, exp = base_text, s["预期效果"]
     return pd.DataFrame([{"日期": str(date.today()), "问题": s["问题"],
                           "采取的动作": s["采取的动作"], "负责人": "",
-                          "预期效果": s["预期效果"], "基准指标": base_text,
+                          "预期效果": exp, "基准指标": base,
                           "实际结果": "", "状态": "待开始"}], columns=_COLS)
 
 
@@ -136,17 +289,17 @@ def _quality_check(df):
     return issues, len(df)
 
 
-def render(adv_list, base_text=""):
+def render(adv_list, base_text="", ctx=None):
     st.markdown("<div class='sect'>经营行动与复盘<small>做了什么、效果如何——把分析变成闭环</small></div>",
                 unsafe_allow_html=True)
     st.caption("报表回答「发生了什么」，这一页回答「改了什么、结果如何」。"
                "每条行动都有负责人、时间、预期与实际，效果可回溯、可交接。"
-               "「基准指标」记录生成动作当时的经营数字，复盘时不会被新数据冲掉。")
+               "「基准指标」和「预期效果」会按每行写到的商品 / 品类和动作类型自动推算，改了「问题 / 动作」就跟着实时变。")
 
     cur = _store()
     c1, c2, c3 = st.columns([1.2, 1.2, 3])
     if c1.button("从改善建议生成", key="rv_seed", disabled=not adv_list):
-        new = from_advice(adv_list, base_text)
+        new = from_advice(adv_list, base_text, ctx)
         st.session_state["_actions"] = pd.concat([cur, new], ignore_index=True).drop_duplicates(
             subset=["问题", "采取的动作"], keep="last")
         st.rerun()
@@ -165,11 +318,16 @@ def render(adv_list, base_text=""):
                 if st.button(name, key=f"sc_{i}", use_container_width=True):
                     _picked_scene = name
         if _picked_scene:
-            new = from_scenario(_picked_scene, base_text)
+            new = from_scenario(_picked_scene, base_text, ctx)
             st.session_state["_actions"] = pd.concat([_store(), new], ignore_index=True)
             st.rerun()
 
     cur = _store()
+    # 实时推算：每行的「基准指标 / 预期效果」按它自己的问题与动作重算，
+    # 这样几行不会共用同一个「全店收入 / 毛利率」。
+    if ctx and not cur.empty and len(cur) <= 30:
+        cur = _refresh_auto(cur, ctx)
+        st.session_state["_actions"] = cur.fillna("")
     if cur.empty:
         st.info("还没有行动项。点「从改善建议生成」，或直接在下面新增一行。")
         empty = pd.DataFrame([{c: "" for c in _COLS}])
@@ -190,11 +348,22 @@ def render(adv_list, base_text=""):
                                 "状态": st.column_config.SelectboxColumn(options=_STATUS),
                                 "问题": st.column_config.TextColumn(width="medium"),
                                 "采取的动作": st.column_config.TextColumn(width="large"),
-                                "预期效果": st.column_config.TextColumn(width="medium"),
-                                "基准指标": st.column_config.TextColumn(width="medium"),
+                                "预期效果": st.column_config.TextColumn(
+                                    width="medium", help="按本行的问题 / 动作类型自动推算"),
+                                "基准指标": st.column_config.TextColumn(
+                                    width="medium", help="按本行提到的商品 / 品类自动取值"),
                                 "实际结果": st.column_config.TextColumn(width="large"),
                             })
     edited = _nonempty(edited).reset_index(drop=True)      # 丢掉空行，只留真实行动
+
+    # 「问题 / 动作」一改，基准与预期立刻按新内容重算（实时），并刷新表格
+    if ctx and not edited.empty and len(edited) <= 30:
+        _recalc = _refresh_auto(edited, ctx).fillna("")
+        if not _recalc[["基准指标", "预期效果"]].equals(
+                edited[["基准指标", "预期效果"]].fillna("")):
+            st.session_state["_actions"] = _recalc
+            st.rerun()
+
     if not edited.equals(cur):
         st.session_state["_actions"] = edited.fillna("")
 
