@@ -968,6 +968,9 @@ PV.badge()
 import sources_ui as SRU
 
 with st.sidebar:
+    st.markdown(
+        "<div class='ops-brand'><b>便利店经营看板</b>"
+        "<span>RETAIL OPS · 2026</span></div>", unsafe_allow_html=True)
     st.markdown("#### 1. 数据来源")
     _src_mode = st.radio(
         "怎么把数据拿进来", ["上传文件", "连接数据源"], horizontal=True,
@@ -996,6 +999,13 @@ _DEMO_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "po
 # 连接数据源的结果（session_state 里），与 ups 文件 / 示例数据三者合一
 # 门控：只有当当前模式是「连接数据源」时才启用连接结果，避免残留串数据
 _conn_sheets_state = st.session_state.get("_conn_sheets") if _src_mode == "连接数据源" else None
+
+# 深链：?demo=1 直接进示例数据，?sec=经营诊断 直达某个模块（分享给同事/面试官时好复现）
+try:
+    if st.query_params.get("demo") == "1":
+        st.session_state["_demo"] = True
+except Exception:
+    pass
 
 if not ups and not _conn_sheets_state and not st.session_state.get("_demo"):
     st.markdown(
@@ -1697,6 +1707,16 @@ def _fm_custom(name, default_sub):
 
 _LOADTIP.empty()
 
+# 深链：?view=pro / simple / big 直接切到对应视图
+try:
+    _qp_view = st.query_params.get("view")
+    if _qp_view and "view_mode" not in st.session_state:
+        st.session_state["view_mode"] = {
+            "pro": "专业分析（完整）", "simple": "老板视角（简单）", "big": "演示大屏（炫酷）",
+        }.get(_qp_view, "专业分析（完整）")
+except Exception:
+    pass
+
 _VIEW = st.radio(
     "看什么", ["老板视角（简单）", "专业分析（完整）", "演示大屏（炫酷）"], horizontal=True,
     key="view_mode", label_visibility="collapsed",
@@ -1833,10 +1853,12 @@ if metric:
 # ============================================================
 # 口径字典
 # ============================================================
-_SECTIONS = ["数据清洗", "概览", "趋势", "结构", "经营", "库存订货", "客户与归因",
+_SECTIONS = ["数据清洗", "概览", "趋势", "结构", "经营", "经营诊断", "库存订货", "客户与归因",
              "行动复盘", "统计建模", "SQL 查询", "数据与口径"]
 try:
-    _sec = st.segmented_control("模块", _SECTIONS, default=_SECTIONS[0],
+    _qp_sec = st.query_params.get("sec")
+    _default_sec = _qp_sec if _qp_sec in _SECTIONS else _SECTIONS[0]
+    _sec = st.segmented_control("模块", _SECTIONS, default=_default_sec,
                                 key="sec_pick", label_visibility="collapsed")
 except Exception:
     _sec = st.radio("模块", _SECTIONS, horizontal=True, key="sec_pick",
@@ -2009,6 +2031,13 @@ if _sec == "经营":
         with r6[2]:
             chart_card(chart_scatter(df, metric, others[0]) if others else None, "scatter")
         chart_card(chart_corr(df, num_cols), "corr", 340)
+
+# ---------------- 经营诊断 ----------------
+if _sec == "经营诊断":
+    import ops_ui as OPSU
+    OPSU.render(df, metric, date_col=dc, cost_col=cost_c, qty_col=qty_c, order_col=oc,
+                name_col=detail, sku_col=_sku_c0, cat_col=big,
+                cost_force=_cost_force, lite=_LITE)
 
 # ---------------- 客户与归因 ----------------
 if _sec == "库存订货":

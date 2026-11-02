@@ -239,3 +239,51 @@ div[data-testid="stFileUploader"] section { background: __CARD_BG__; }
   .htext, .sumtext { font-size: 12px; }
   button[data-baseweb="tab"] { padding: 8px 11px !important; font-size: 12.5px !important; }
 }
+
+/* ============================================================
+   侧栏统一：对齐「侧栏风格页」的分组式导航
+   —— 小字号分组标题 + 虚线分隔 + 更紧的竖向节奏 + 品牌块
+   ============================================================ */
+section[data-testid="stSidebar"] > div:first-child {
+  padding-top: 12px;
+}
+[data-testid="stSidebar"] h4 {
+  font-size: 10.5px !important;
+  letter-spacing: .16em;
+  color: __MUTED__ !important;
+  font-weight: 600 !important;
+  margin: 15px 0 5px !important;
+  padding-top: 11px;
+  border-top: 1px dashed __GRID__;
+  line-height: 1.5;
+}
+[data-testid="stSidebar"] h4:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 2px !important;
+}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: .5rem; }
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stNumberInput label,
+[data-testid="stSidebar"] .stRadio label,
+[data-testid="stSidebar"] .stMultiSelect label {
+  font-size: 11.5px !important;
+  color: __MUTED__ !important;
+}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] .stCaption { font-size: 10.5px !important; line-height: 1.55; }
+[data-testid="stSidebar"] .stButton > button { width: 100%; }
+[data-testid="stSidebar"] [data-baseweb="radio"] { margin-bottom: 1px; }
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] { padding: 10px; }
+[data-testid="stSidebar"] hr { margin: 8px 0; border-color: __GRID__; }
+/* 侧栏品牌块 */
+.ops-brand {
+  padding: 2px 0 12px;
+  border-bottom: 1px solid __GRID__;
+  margin-bottom: 8px;
+}
+.ops-brand b { display: block; font-size: 15px; color: __TEXT__; letter-spacing: .3px; }
+.ops-brand span {
+  display: block; font-size: 10px; color: #9A9388; letter-spacing: .2em; margin-top: 3px;
+}

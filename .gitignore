@@ -17,3 +17,6 @@ metric_formulas.json
 .streamlit/secrets.toml
 .DS_Store
 Thumbs.db
+
+# 本机工作记录（不进仓库）
+.workbuddy/

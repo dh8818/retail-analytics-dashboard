@@ -175,3 +175,27 @@ def catalog_rows(bindings: dict[str, str] | None = None):
             "别名": "、".join(meta.get("aliases", [])),
         })
     return rows
+
+
+# ---------------- 零售运营指标（补全：效率 / 成本 / 保本 / 订货） ----------------
+# 上面 CATALOG 的 9 个指标都只依赖 POS 明细就能算；但门店经营还有一层必须
+# 手工输入的量：固定开销、库存、面积、人数、报损。缺了这一层，看板只能回答
+# 「卖了多少」，回答不了「赚没赚钱、货转得快不快、该不该促销」。
+# 这些指标的定义放在 retail_ops.OPS_CATALOG，求值放在 retail_ops.compute()。
+try:
+    import retail_ops as _ops
+except Exception:  # 模块缺失时不影响原有指标中心
+    _ops = None
+
+OPS_CATALOG_VERSION = "2.0"
+
+
+def ops_rows():
+    """零售运营指标的口径字典行（27 项）；retail_ops 不可用时返回空列表。"""
+    return _ops.ops_dict_rows() if _ops else []
+
+
+def all_dict_rows(bindings: dict[str, str] | None = None):
+    """完整口径字典：POS 可算的 9 项 + 需手工输入的 27 项，一起导出报告。"""
+    base = [{**r, "层级": "明细可算"} for r in catalog_rows(bindings)]
+    return base + ops_rows()

@@ -54,6 +54,34 @@ prev7 = pos[(pos["日期"] <= D_END - pd.Timedelta(days=7)) &
 wow = (last7 - prev7) / prev7 * 100 if prev7 else 0.0
 
 
+# ---------------- 门店经营参数（换成真实门店时改这里） ----------------
+# 固定开销按「每月」填，零售运营模块会自动按统计天数折算
+OPS_PARAMS = {
+    "area": 68, "staff": 5,
+    "rent": 6000, "labor": 19000, "utility": 2200, "dep": 800, "other": 800,
+    "loss": 0, "shrink": 0, "sku_oos": 0,
+}
+try:
+    import retail_ops as RO
+    INV_COST = float((prod["当前库存"] * prod["进价"]).sum())
+    _abc = pos.groupby("SKU")["金额"].sum().sort_values(ascending=False)
+    _cum = _abc.cumsum() / _abc.sum()
+    OPS_M = RO.compute({
+        "days": SPAN, "sales": float(sales), "cogs": float(cost),
+        "orders": int(orders), "qty": float(items),
+        "open_inv": 0, "close_inv": INV_COST,
+        "sku_active": int(prod.shape[0]), "sku_sold": int(_abc.shape[0]),
+        **OPS_PARAMS,
+    })
+    OPS_DIAG = RO.diagnose(OPS_M, {
+        "c_sku_count": int((_cum > 0.9).sum()),
+        "c_sku_sales_share": float(_abc[_cum > 0.9].sum() / sales),
+    })
+except Exception as _e:  # 模块缺失时不阻断看板生成
+    RO, OPS_M, OPS_DIAG = None, None, None
+    print(f"[warn] 零售运营模块未启用：{_e}")
+
+
 def fig_base(fig, height=300, title=None):
     fig.update_layout(
         height=height,
@@ -202,6 +230,53 @@ def kpi_card(label, value, sub="", color=TEXT):
     </div>"""
 
 
+def ops_kpi_cards():
+    """补全的效率与盈利指标：周转、坪效、保本、净利。"""
+    if not OPS_M:
+        return ""
+    m = OPS_M
+    return (
+        kpi_card("商品周转", f"{m['turn_days']:.1f} 天", f"年化 {m['turn_annual']:.0f} 次")
+        + kpi_card("坪效", f"¥{m['psm']:,.0f}", f"元/㎡/月 · {OPS_PARAMS['area']} ㎡")
+        + kpi_card("保本日均", f"¥{m['be_daily']:,.0f}", f"安全边际 {m['safety']*100:.1f}%",
+                   "#4F7A55" if m["safety"] >= 0.15 else "#B9812F")
+        + kpi_card("净利", f"¥{m['net']/10000:.2f}万", f"净利率 {m['net_margin']*100:.1f}%",
+                   "#4F7A55" if m["net"] >= 0 else "#A84A42")
+    )
+
+
+def ops_metric_table():
+    if not OPS_M:
+        return ""
+    m = OPS_M
+    rows = [
+        ["商品周转率", f"{m['turnover']:.2f} 次", "—", "销货成本 ÷ 平均库存成本"],
+        ["周转天数", f"{m['turn_days']:.1f} 天", "7–14 天", "平均库存成本 ÷ 日均销货成本"],
+        ["年化周转次数", f"{m['turn_annual']:.0f} 次", "26–52 次", "365 ÷ 周转天数"],
+        ["坪效", f"¥{m['psm']:,.0f}", "1,000–2,000", "销售额 ÷ 营业面积（折算月）"],
+        ["人效", f"¥{m['labor_eff']:,.0f}", "10,000–20,000", "销售额 ÷ 员工数（折算月）"],
+        ["租售比", f"{m['rent_ratio']*100:.1f}%", "≤10%", "房租 ÷ 销售额（月口径）"],
+        ["售罄率", f"{m['sell_through']*100:.1f}%", "60%–85%", "销量 ÷（销量 + 期末库存件数）"],
+        ["缺货率", f"{m['oos_rate']*100:.1f}%", "≤5%", "缺货 SKU ÷ 在售 SKU"],
+        ["报损率", f"{m['loss_rate']*100:.1f}%", "≤1.5%", "报损金额 ÷ 销售额（未接报损单时为 0）"],
+        ["动销率", f"{m['active_rate']*100:.1f}%", "≥80%", "有销量 SKU ÷ 在售 SKU"],
+        ["保本销售额", f"¥{m['be_sales']:,.0f}", "—", "固定费用 ÷ 毛利率"],
+        ["安全边际", f"{m['safety']*100:.1f}%", "≥15%", "（销售额 − 保本销售额）÷ 销售额"],
+        ["经营利润", f"¥{m['op_profit']:,.0f}", "—", "毛利额 − 固定费用"],
+        ["净利", f"¥{m['net']:,.0f}", "—", "经营利润 − 报损 − 盘亏"],
+    ]
+    return table_html(pd.DataFrame(rows, columns=["指标", "数值", "参考区间", "计算口径"]))
+
+
+def ops_diag_card():
+    if not OPS_DIAG:
+        return ""
+    rows = [{"优先级": a["priority"], "动作": a["title"], "判断依据": a["basis"][0],
+             "预计月改善": f"¥{a['impact']:,.0f}"} for a in OPS_DIAG["actions"]]
+    return (f'<div class="card c12"><div class="card-title">经营诊断（规则引擎）：'
+            f'{OPS_DIAG["headline"]}</div>{table_html(pd.DataFrame(rows))}</div>')
+
+
 def table_html(df, badge_col=None):
     head = "".join(f"<th>{c}</th>" for c in df.columns)
     body = ""
@@ -283,6 +358,7 @@ html = f"""<!DOCTYPE html>
     {kpi_card("周环比", f"{wow:+.1f}%", f"近7天 ¥{last7/10000:.2f}万",
               "#4F7A55" if wow >= 0 else "#A84A42")}
     {kpi_card("在售 SKU", f"{prod.shape[0]}", f"A 类 {int((sku['等级']=='A').sum())} 个贡献 70%")}
+    {ops_kpi_cards()}
   </div>
 
   <div class="grid">
@@ -299,6 +375,11 @@ html = f"""<!DOCTYPE html>
       <div class="card-title">未来 7 天补货建议（近 7 日日均 × 7 天 × 1.15 安全系数 − 当前库存）</div>
       {table_html(reco)}
     </div>
+    <div class="card c6">
+      <div class="card-title">盈利与效率指标（固定开销按 28,800 元/月假设；报损未接入时净利略高）</div>
+      {ops_metric_table()}
+    </div>
+    {ops_diag_card()}
   </div>
   <div class="foot">模拟数据演示 ｜ 换成门店真实 POS 明细后，指标、图表、建议全部自动重算</div>
 </div>
