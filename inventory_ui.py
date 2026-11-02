@@ -12,25 +12,23 @@ _BAD, _WARN, _OK = "#A84A42", "#B9812F", "#6F8A63"
 
 
 def _sect(t, sub=""):
-    st.markdown(f"<div class='sect'>{t}<small>{sub}</small></div>", unsafe_allow_html=True)
+    st.html(f"<div class='sect'>{t}<small>{sub}</small></div>")
 
 
 def _kpi(items):
     cols = st.columns(len(items))
     for c, (lab, val, sub) in zip(cols, items):
-        c.markdown(f"<div class='kpi'><div class='kpi-label'>{lab}</div>"
-                   f"<div class='kpi-value'>{val}</div><div class='kpi-sub'>{sub}</div></div>",
-                   unsafe_allow_html=True)
+        c.html(f"<div class='kpi'><div class='kpi-label'>{lab}</div>"
+                   f"<div class='kpi-value'>{val}</div><div class='kpi-sub'>{sub}</div></div>")
 
 
 def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
     _sect("库存与订货", "缺货、临期、报损、该订多少——每个结论都能摊开算给你看")
-    st.markdown(
+    st.html(
         "<div class='insight' style='border-left-color:#B9812F'>"
         "<b>数据说明</b>：销量与金额来自你上传的销售明细；"
         "<b>期初库存、到货、在途、保质期、报损为策略仿真生成</b>（补货点 + 目标库存策略，FIFO 过期报损）。"
-        "接入门店系统的库存快照后，这一页无需改代码即可换成真实数据。</div>",
-        unsafe_allow_html=True)
+        "接入门店系统的库存快照后，这一页无需改代码即可换成真实数据。</div>")
 
     snap, meta = perf.get("inv_snap", lambda: INV.build_snapshot(
         df, sku_col, date_col, qty_col, name_col, cat_col, cost_col))
@@ -61,8 +59,7 @@ def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
     fresh = g[g["保质期"] <= 15].copy()
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown(f"<div style='font-size:12.5px;color:{MUTED}'>保质期 ≤15 天的 SKU</div>",
-                    unsafe_allow_html=True)
+        st.html(f"<div style='font-size:12.5px;color:{MUTED}'>保质期 ≤15 天的 SKU</div>")
         if fresh.empty:
             st.caption("没有短保商品。")
         else:
@@ -90,8 +87,7 @@ def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
         st.plotly_chart(f, width="stretch", config={"displayModeBar": False})
     with c2:
         slow = g.nlargest(6, "周转天数")[["商品名称", "周转天数", "库存金额"]]
-        st.markdown(f"<div style='font-size:12.5px;color:{MUTED}'>周转最慢的 6 个</div>",
-                    unsafe_allow_html=True)
+        st.html(f"<div style='font-size:12.5px;color:{MUTED}'>周转最慢的 6 个</div>")
         st.dataframe(slow, width="stretch", hide_index=True)
 
     # ---------- 订货建议 ----------
@@ -105,9 +101,8 @@ def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
     if plan_all.empty:
         st.caption("当前所有 SKU 库存充足，无需补货。")
     else:
-        st.markdown(f"<div style='font-size:12.5px;color:{MUTED};margin-bottom:4px'>"
-                    f"需补货 {len(plan_all)} / {len(g)} 个 SKU：</div>",
-                    unsafe_allow_html=True)
+        st.html(f"<div style='font-size:12.5px;color:{MUTED};margin-bottom:4px'>"
+                    f"需补货 {len(plan_all)} / {len(g)} 个 SKU：</div>")
         st.dataframe(plan_all[_show_cols], width="stretch", hide_index=True,
                      height=360)
         st.download_button(
@@ -118,8 +113,7 @@ def render(df, sku_col, date_col, qty_col, name_col, cat_col, cost_col):
         with st.expander("看某一只商品是怎么算出来的", expanded=False):
             pick = st.selectbox("选择商品", plan_all["商品名称"].tolist(), key="inv_pick")
             row = plan_all[plan_all["商品名称"] == pick].iloc[0]
-            st.markdown(f"<div class='qbox'>{INV.reorder_explain(row)}</div>",
-                        unsafe_allow_html=True)
+            st.html(f"<div class='qbox'>{INV.reorder_explain(row)}</div>")
             hist = snap[snap["商品编码"] == row["商品编码"]].tail(30)
             f = go.Figure()
             f.add_trace(go.Scatter(x=hist["日期"], y=hist["期末库存"], name="期末库存",

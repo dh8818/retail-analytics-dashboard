@@ -128,22 +128,19 @@ def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
         ("异常点", "滚动中位数 + MAD（|z|>3.5）", dc or "—", "比 3σ 抗极端值；先排查缺货/系统故障再剔除"),
     ]
     if with_editor:
-        st.markdown("<div class='sect'>指标公式<small>全部可改，改完立即生效；图表仍按列聚合，不受影响</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>指标公式<small>全部可改，改完立即生效；图表仍按列聚合，不受影响</small></div>")
         st.caption("写法：sum(列名) / nunique(列名) / sum(进价 * 数量)；也能用 [毛利] / [销售收入] 引用别的指标。"
                    "改的是「指标数值」，图形还是用原始列画。")
         for _m in MT.ORDER:
             _c1, _c2, _c3 = st.columns([1.1, 3.0, 1.7])
-            _c1.markdown(f"<div style='padding-top:7px;font-weight:600;font-size:13px'>{_m}</div>",
-                         unsafe_allow_html=True)
+            _c1.html(f"<div style='padding-top:7px;font-weight:600;font-size:13px'>{_m}</div>")
             _c2.text_input(_m, key=f"fm_{_m}", label_visibility="collapsed",
                            placeholder=_FM_DEFAULT.get(_m) or "（无此指标）")
             if MVERR.get(_m):
-                _c3.markdown(f"<div style='color:#A84A42;font-size:12px;padding-top:9px'>⚠ {MVERR[_m][:38]}</div>",
-                             unsafe_allow_html=True)
+                _c3.html(f"<div style='color:#A84A42;font-size:12px;padding-top:9px'>⚠ {MVERR[_m][:38]}</div>")
             else:
-                _c3.markdown(f"<div style='color:{MUTED};font-size:13px;padding-top:9px'>"
-                             f"= {MT.display(_m, MV.get(_m))}</div>", unsafe_allow_html=True)
+                _c3.html(f"<div style='color:{MUTED};font-size:13px;padding-top:9px'>"
+                             f"= {MT.display(_m, MV.get(_m))}</div>")
         _b1, _b2, _ = st.columns([1.1, 1.1, 2.2])
         if _b1.button("💾 保存公式", key="fm_save"):
             _fm_now = {k: st.session_state.get(f"fm_{k}", v) for k, v in _FM_DEFAULT.items()}
@@ -167,12 +164,11 @@ def render_metric_dict(metric, qty_c, cost_c, order_col, dc, refund_mode, gran,
         for r in rows:
             body += ("<tr>" + f"<td>{r[0]}</td><td class='mono'>{r[1]}</td>"
                      f"<td>{r[2]}</td><td class='note'>{r[3]}</td>" + "</tr>")
-        st.markdown(f"<table class='mdict'><thead><tr>{head}</tr></thead>"
-                    f"<tbody>{body}</tbody></table>", unsafe_allow_html=True)
-        st.markdown(
+        st.html(f"<table class='mdict'><thead><tr>{head}</tr></thead>"
+                    f"<tbody>{body}</tbody></table>")
+        st.html(
             "<div class='insight'>上面每一条都是本工具<b>当前实际执行</b>的逻辑，会随左侧「口径设置」变化。"
-            "跟财务/老板对数之前，先把这张表对一遍——口径不一致时，数字差多少都能解释得通。</div>",
-            unsafe_allow_html=True)
+            "跟财务/老板对数之前，先把这张表对一遍——口径不一致时，数字差多少都能解释得通。</div>")
     elif with_editor:
         # 只把「不是指标、改不了」的算法口径放折叠里，避免和上面的可改公式重复
         _algo = [r for r in rows if r[0] not in MT.ORDER]
@@ -201,7 +197,7 @@ try:
                 encoding="utf-8").read()
     for _k, _v in _UI_TOKENS.items():
         _css = _css.replace(f"__{_k}__", _v)
-    st.markdown(f"<style>{_css}</style>", unsafe_allow_html=True)
+    st.html(f"<style>{_css}</style>")
 except Exception:
     pass
 
@@ -968,10 +964,10 @@ PV.badge()
 import sources_ui as SRU
 
 with st.sidebar:
-    st.markdown(
+    st.html(
         "<div class='ops-brand'><b>便利店经营看板</b>"
-        "<span>RETAIL OPS · 2026</span></div>", unsafe_allow_html=True)
-    st.markdown("#### 1. 数据来源")
+        "<span>RETAIL OPS · 2026</span></div>")
+    st.markdown("#### 数据来源")
     _src_mode = st.radio(
         "怎么把数据拿进来", ["上传文件", "连接数据源"], horizontal=True,
         key="src_mode", label_visibility="collapsed")
@@ -1008,13 +1004,12 @@ except Exception:
     pass
 
 if not ups and not _conn_sheets_state and not st.session_state.get("_demo"):
-    st.markdown(
+    st.html(
         "<div style='background:#fff;border:1px solid #E8E2D8;border-left:4px solid #B85532;"
         "border-radius:12px;padding:18px 20px 8px;margin:6px 0 12px'>"
         "<div style='font-size:16px;font-weight:600;color:#2A2723;margin-bottom:4px'>把数据拿进来</div>"
         "<div style='font-size:12.5px;color:#6E685E;margin-bottom:10px'>"
-        "两种方式任选：上传文件，或连接收银系统数据源。文件只在你自己的浏览器里解析。</div></div>",
-        unsafe_allow_html=True)
+        "两种方式任选：上传文件，或连接收银系统数据源。文件只在你自己的浏览器里解析。</div></div>")
 
     # 正文里的来源切换：手机端侧栏收起时，也能在这里选
     _main_mode = st.radio("数据来源", ["上传文件", "连接数据源"], horizontal=True,
@@ -1031,8 +1026,8 @@ if not ups and not _conn_sheets_state and not st.session_state.get("_demo"):
             ups = _main_up
 
     if not ups and not _conn_sheets_state and os.path.exists(_DEMO_CSV):
-        st.markdown("<div style='font-size:12.5px;color:#6E685E;margin:10px 0 4px'>"
-                    "还没有数据？先用示例数据看看能出什么：</div>", unsafe_allow_html=True)
+        st.html("<div style='font-size:12.5px;color:#6E685E;margin:10px 0 4px'>"
+                    "还没有数据？先用示例数据看看能出什么：</div>")
         if st.button("加载示例数据（便利店 3 个月 POS，约 4 万行）", key="demo_load", type="primary"):
             st.session_state["_demo"] = True
             st.rerun()
@@ -1052,14 +1047,14 @@ if not ups and not _conn_sheets_state and not st.session_state.get("_demo"):
         st.stop()
 
 _LOADTIP = st.empty()
-_LOADTIP.markdown(
+_LOADTIP.html(
     "<div style='background:#F6EBE3;border-left:3px solid #B85532;border-radius:10px;"
     "padding:12px 16px;margin:8px 0 12px;font-size:13px;color:#2A2723'>"
     "<b>正在加载数据…</b>　首次打开通常需要 <b>10–20 秒</b>，原因有两个：<br>"
     "① 服务部署在国外（Streamlit 免费实例），国内访问要绕一圈；<br>"
     "② 每次打开都要重新计算一遍指标。<br>"
     "<span style='color:#6E685E'>你的文件只在这台电脑的浏览器里解析，不会上传到任何服务器。</span>"
-    "</div>", unsafe_allow_html=True)
+    "</div>")
 
 try:
     sheets = {}
@@ -1094,7 +1089,7 @@ sheet_names = list(sheets.keys())
 if len(sheet_names) > 1:
     default_idx = max(range(len(sheet_names)), key=lambda i: len(sheets[sheet_names[i]]))
     with st.sidebar:
-        st.markdown("#### 2. 主表（明细表）")
+        st.markdown("#### 主表（明细表）")
         sheet = st.selectbox("Sheet", sheet_names, index=default_idx, label_visibility="collapsed")
 else:
     sheet = sheet_names[0]
@@ -1106,7 +1101,7 @@ others = [s for s in sheet_names if s != sheet]
 join_cfgs = []
 if others:
     with st.sidebar:
-        st.markdown("#### 3. 表关系")
+        st.markdown("#### 表关系")
         for name in others:
             dim = clean_sheet(sheets[name])
             if dim.empty:
@@ -1203,7 +1198,7 @@ big_default = best_big()
 detail_default = best_detail(big_default)
 
 with st.sidebar:
-    st.markdown("#### 4. 分析设置")
+    st.markdown("#### 分析设置")
     _ua = ""
     try:
         _ua = str(st.context.headers.get("User-Agent", ""))
@@ -1258,13 +1253,13 @@ with st.sidebar:
                 mask = (dta >= pd.Timestamp(rng[0])) & (dta <= pd.Timestamp(rng[1]) + pd.Timedelta(days=1))
                 df0 = df0[mask.to_numpy()]
 
-    st.markdown("#### 5. 筛选")
+    st.markdown("#### 筛选")
     _pre_filter_df = df0.copy()          # 下钻选项永远从这里取，不受当前筛选影响
     _drill = st.session_state.get("_drill")
     if _drill:
         _dc_d, _dv_d = _drill
-        st.markdown(f"<div class='caliber' style='margin:0 0 8px;padding:7px 10px;font-size:12px'>"
-                    f"下钻中：{_dc_d} ＝ {_dv_d}</div>", unsafe_allow_html=True)
+        st.html(f"<div class='caliber' style='margin:0 0 8px;padding:7px 10px;font-size:12px'>"
+                    f"下钻中：{_dc_d} ＝ {_dv_d}</div>")
         if st.button("✕ 退出下钻", key="drill_clear"):
             st.session_state.pop("_drill", None)
             st.rerun()
@@ -1306,26 +1301,25 @@ if metric:
 
 # ---------- 顶部信息 ----------
 _IS_BOSS_EARLY = str(st.session_state.get("view_mode", "老板视角（简单）")).startswith("老板")
-st.markdown(
-    "" if _IS_BOSS_EARLY else
-    f"<div style='font-size:12.5px;color:{MUTED};margin-bottom:6px'>"
-    f"文件：{esc(up_name)} ｜ 主表：{esc(sheet)} ｜ {len(df):,} 行 × {df.shape[1]} 列 ｜ "
-    f"识别出 {len(date_cols)} 个时间列、{len(num_cols)} 个数值列、{len(cat_cols)} 个类别列"
-    + (f"、地理列「{geo}」" if geo else "") + "</div>", unsafe_allow_html=True)
+if not _IS_BOSS_EARLY:
+    st.html(
+        f"<div style='font-size:12.5px;color:{MUTED};margin-bottom:6px'>"
+        f"文件：{esc(up_name)} ｜ 主表：{esc(sheet)} ｜ {len(df):,} 行 × {df.shape[1]} 列 ｜ "
+        f"识别出 {len(date_cols)} 个时间列、{len(num_cols)} 个数值列、{len(cat_cols)} 个类别列"
+        + (f"、地理列「{geo}」" if geo else "") + "</div>")
 if joined_note and not _IS_BOSS_EARLY:
-    st.markdown(f"<div style='font-size:12px;color:#4F7A55;margin-bottom:6px'>🔗 已关联："
-                + "；".join(joined_note) + "</div>", unsafe_allow_html=True)
+    st.html(f"<div style='font-size:12px;color:#4F7A55;margin-bottom:6px'>🔗 已关联："
+                + "；".join(joined_note) + "</div>")
 if _derived_note:
-    st.markdown(f"<div style='font-size:12px;color:#4F7A55;margin-bottom:6px'>🧮 {_derived_note}</div>",
-                unsafe_allow_html=True)
+    st.html(f"<div style='font-size:12px;color:#4F7A55;margin-bottom:6px'>🧮 {_derived_note}</div>")
 if dc:
     yrs = df[dc].dt.year.nunique()
     qs = df[dc].dt.to_period("Q").nunique()
-    st.markdown(
-        "" if _IS_BOSS_EARLY else
-        f"<div style='font-size:12px;color:{MUTED};margin-bottom:8px'>"
-        f"时间跨度：{df[dc].min():%Y-%m-%d} ~ {df[dc].max():%Y-%m-%d} ｜ 覆盖 {yrs} 个年度、{qs} 个季度"
-        f"</div>", unsafe_allow_html=True)
+    if not _IS_BOSS_EARLY:
+        st.html(
+            f"<div style='font-size:12px;color:{MUTED};margin-bottom:8px'>"
+            f"时间跨度：{df[dc].min():%Y-%m-%d} ~ {df[dc].max():%Y-%m-%d} ｜ 覆盖 {yrs} 个年度、{qs} 个季度"
+            f"</div>")
 
 
 
@@ -1579,7 +1573,7 @@ def chart_card(fig, key, height=CHART_H):
     with st.container(border=True):
         c1, c2 = st.columns([0.88, 0.12], vertical_alignment="center")
         with c1:
-            st.markdown(f"<div class='ctitle'>{title}</div>", unsafe_allow_html=True)
+            st.html(f"<div class='ctitle'>{title}</div>")
         with c2:
             if st.button("⛶", key=f"z_{key}"):
                 st.session_state["_zoom"] = (go.Figure(fig), title)
@@ -1595,8 +1589,7 @@ if _zoom:
     with st.container(border=True):
         zc1, zc2 = st.columns([0.88, 0.12], vertical_alignment="center")
         with zc1:
-            st.markdown(f"<div class='ctitle'>🔍 {_ztitle}（放大视图）</div>",
-                        unsafe_allow_html=True)
+            st.html(f"<div class='ctitle'>🔍 {_ztitle}（放大视图）</div>")
         with zc2:
             if st.button("✕ 关闭", key="zoom_close"):
                 st.session_state.pop("_zoom", None)
@@ -1707,27 +1700,20 @@ def _fm_custom(name, default_sub):
 
 _LOADTIP.empty()
 
-# 深链：?view=pro / simple / big 直接切到对应视图
+# 深链：?view=pro / simple 直接切到对应视图
 try:
     _qp_view = st.query_params.get("view")
     if _qp_view and "view_mode" not in st.session_state:
         st.session_state["view_mode"] = {
-            "pro": "专业分析（完整）", "simple": "老板视角（简单）", "big": "演示大屏（炫酷）",
+            "pro": "专业分析（完整）", "simple": "老板视角（简单）",
         }.get(_qp_view, "专业分析（完整）")
 except Exception:
     pass
 
 _VIEW = st.radio(
-    "看什么", ["老板视角（简单）", "专业分析（完整）", "演示大屏（炫酷）"], horizontal=True,
+    "看什么", ["老板视角（简单）", "专业分析（完整）"], horizontal=True,
     key="view_mode", label_visibility="collapsed",
-    help="老板视角只回答「赚没赚、漏在哪、改什么」；专业分析是完整的 11 个模块；"
-         "演示大屏是深色全屏风，给老板/客户看结果用。")
-
-if _VIEW.startswith("演示大屏"):
-    import dashboard_ui as DBU
-    DBU.render(df, metric=metric, date_col=dc, big_col=big, qty_col=_qty_c0,
-               cost_col=_cost_c0, order_col=_oc0, cost_force=_cost_force)
-    st.stop()
+    help="老板视角只回答「赚没赚、漏在哪、改什么」；专业分析是完整的 12 个模块。")
 
 if _VIEW.startswith("老板"):
     # 这一段跑在专业分析之前，所以需要的列和建议就地算，别依赖后面才定义的变量
@@ -1744,12 +1730,13 @@ if _VIEW.startswith("老板"):
                cost_force=_cost_force)
     st.stop()
 
-st.markdown(
+st.html(
+    "<div>"
     "<div style='display:flex;align-items:baseline;gap:14px;flex-wrap:wrap'>"
     f"<div style='font-size:23px;font-weight:600;color:{BI_NAVY};letter-spacing:.4px'>智能数据分析</div>"
     f"<div style='font-size:12.5px;color:{MUTED}'>上传 Excel / CSV → 自动识别结构 → 多维分析</div></div>"
-    f"<div style='height:2px;background:{BI_NAVY};width:44px;margin:8px 0 10px'></div>",
-    unsafe_allow_html=True)
+    f"<div style='height:2px;background:{BI_NAVY};width:44px;margin:8px 0 10px'></div>"
+    "</div>")
 
 # ---------- 当前口径条 + 顶部字典 ----------
 _caliber_bits = [
@@ -1759,10 +1746,9 @@ _caliber_bits = [
     f"客单价＝{aov_mode}",
     f"成本＝{cost_force}",
 ]
-st.markdown(
+st.html(
     "<div class='caliber'><span>" + " ｜ ".join(_caliber_bits) + "</span>"
-    "<span class='caliber-hint'>在左侧「口径设置」里改，全页跟着变</span></div>",
-    unsafe_allow_html=True)
+    "<span class='caliber-hint'>在左侧「口径设置」里改，全页跟着变</span></div>")
 
 
 
@@ -1782,11 +1768,11 @@ _hero = [
 _hc = st.columns(4)
 for _i, (_lab, _val, _sub, _color) in enumerate(_hero):
     with _hc[_i]:
-        st.markdown(
+        st.html(
             f"<div class='kpi hero' style='border-left:4px solid {_color}'>"
             f"<div class='kpi-label'>{_lab}</div>"
             f"<div class='kpi-value hero-val'>{_val}</div>"
-            f"<div class='kpi-sub'>{_sub}</div></div>", unsafe_allow_html=True)
+            f"<div class='kpi-sub'>{_sub}</div></div>")
 
 # ---------- 公共计算 ----------
 _k = f"{metric}:{dc}:{big}:{detail}:{_cost_force}:{len(df)}"
@@ -1804,9 +1790,9 @@ if _issues_n:
     _names = "、".join(i["问题"] for i in _issues[:3])
     if _issues_n > 3:
         _names += " 等"
-    st.markdown(f"<div class='brief' style='border-left-color:#B9812F'>"
+    st.html(f"<div class='brief' style='border-left-color:#B9812F'>"
                 f"检测到 <b>{_issues_n} 类</b>数据问题：{_names}，"
-                f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>", unsafe_allow_html=True)
+                f"建议先到「数据清洗」处理，否则统计结果会有偏差。</div>")
 
 _lead = ""
 if sums:
@@ -1816,7 +1802,7 @@ elif ins:
 if _lead:
     _lead = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", _lead)
     _lead = _html.escape(_lead).replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
-    st.markdown(f"<div class='brief'>{_lead}</div>", unsafe_allow_html=True)
+    st.html(f"<div class='brief'>{_lead}</div>")
 
 # 分段选择器：只渲染当前模块。手机上如果 6 个 tab 全渲染，25 张 Plotly 图会把浏览器拖垮
 _adv = perf.get(f"advice:{metric}:{_qty_c0}:{_cost_c0}:{dc}:{detail}:{big}:{_oc0}:{target_amount}:{len(df)}",
@@ -1836,9 +1822,8 @@ _price_c0 = next((c for c in num_cols
 _warn_n = sum(1 for h in health if h["level"] == "warn")
 
 if _warn_n:
-    st.markdown(f"<div style='font-size:12px;color:#C08A3E;margin:2px 0 6px'>"
-                f"⚠ 数据体检发现 {_warn_n} 处需要注意，详见「数据与口径」页</div>",
-                unsafe_allow_html=True)
+    st.html(f"<div style='font-size:12px;color:#C08A3E;margin:2px 0 6px'>"
+                f"⚠ 数据体检发现 {_warn_n} 处需要注意，详见「数据与口径」页</div>")
 
 _uc = len(user_cols(df))
 items = [("数据行数", f"{len(df):,}", sheet), ("列数", f"{_uc}", "不含内部计算列")]
@@ -1868,27 +1853,25 @@ _sec = _sec or _SECTIONS[0]
 # ---------------- 概览 ----------------
 if _sec == "概览":
     if sums:
-        st.markdown("<div class='sect'>业务总结<small>谁卖得好、什么时候好卖、谁真正赚钱</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>业务总结<small>谁卖得好、什么时候好卖、谁真正赚钱</small></div>")
         for i in range(0, len(sums), 2):
             pair = sums[i:i + 2]
             cols2 = st.columns(2)
             for j, it in enumerate(pair):
                 with cols2[j]:
-                    st.markdown(
+                    st.html(
                         f"<div class='sumcard'><div class='sumhead'>{it['icon']} {esc(it['title'])}</div>"
-                        f"<div class='sumtext'>{esc(it['text'])}</div></div>", unsafe_allow_html=True)
+                        f"<div class='sumtext'>{esc(it['text'])}</div></div>")
     if _adv:
-        st.markdown("<div class='sect'>改善建议<small>按你这份数据算的，每条都带依据；预期是粗估，不是承诺</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>改善建议<small>按你这份数据算的，每条都带依据；预期是粗估，不是承诺</small></div>")
         for _a in _adv:
             _col = {"高": "#A84A42", "中": "#C08A3E", "低": "#4F7A55"}.get(_a["sev"], MUTED)
-            st.markdown(
+            st.html(
                 f"<div class='sumcard' style='border-left:4px solid {_col}'>"
                 f"<div class='sumhead'><span style='color:{_col};font-weight:700'>{_a['sev']}</span> · {esc(_a['title'])}</div>"
                 f"<div class='sumtext'><b>依据</b>：{esc(_a['evidence'])}<br>"
                 f"<b>怎么做</b>：{esc(_a['action'])}<br>"
-                f"<b>预期</b>：{esc(_a['impact'])}</div></div>", unsafe_allow_html=True)
+                f"<b>预期</b>：{esc(_a['impact'])}</div></div>")
 
     # 汇报话术：把结论组织成能直接念的一段话
     if metric:
@@ -1918,8 +1901,7 @@ if _sec == "概览":
         _o_tab, _om = perf.get(f"om:{oc}:{metric}:{qty_c}:{dc}:{_order_key}:{_tie}:{_include_refunds}:{len(df)}",
                                lambda: AN.order_metrics(df, oc, metric, qty_c, dc, _order_key, _tie, _include_refunds))
         if _om:
-            st.markdown("<div class='sect'>关键指标<small>订单级口径，和上面的行级指标不是一回事</small></div>",
-                        unsafe_allow_html=True)
+            st.html("<div class='sect'>关键指标<small>订单级口径，和上面的行级指标不是一回事</small></div>")
             XS.kpi_row([("订单数", f"{_om['订单数']:,}", "订单号去重"),
                         ("客单价", fmt(_om["客单价"]), "金额 ÷ 订单数"),
                         ("连带率", f"{_om['连带率']:.2f}", "件数 ÷ 订单数"),
@@ -1932,7 +1914,7 @@ if _sec == "概览":
                 # make_insights 里拼了品类/商品/列名等用户数据，渲染前统一转义，
                 # 只放行上面刚生成的 <b> 标签
                 t = _html.escape(t).replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
-                st.markdown(f"<div class='insight'>{t}</div>", unsafe_allow_html=True)
+                st.html(f"<div class='insight'>{t}</div>")
 
 # ---------------- 趋势 ----------------
 if _sec == "数据清洗":
@@ -1967,8 +1949,7 @@ if _sec == "结构":
             if _dn is not None:
                 _dn.update_layout(height=330, title=None, margin=dict(l=16, r=16, t=12, b=12))
                 with st.container(border=True):
-                    st.markdown(f"<div class='ctitle'>{big} 构成（下方选值可下钻）</div>",
-                                unsafe_allow_html=True)
+                    st.html(f"<div class='ctitle'>{big} 构成（下方选值可下钻）</div>")
                     try:
                         _ev = st.plotly_chart(_dn, key="dn_drill", on_select="rerun",
                                               selection_mode="points", width="stretch",
@@ -2083,17 +2064,15 @@ if _sec == "统计建模":
 
 if _sec == "数据与口径":
     PV.render()
-    st.markdown("<div class='sect'>数据概况</div>", unsafe_allow_html=True)
+    st.html("<div class='sect'>数据概况</div>")
     kcols = st.columns(len(items[:5]))
     for i, (lab, val, sub) in enumerate(items[:5]):
         with kcols[i]:
-            st.markdown(f"<div class='kpi'><div class='kpi-label'>{lab}</div>"
-                        f"<div class='kpi-value'>{val}</div><div class='kpi-sub'>{sub}</div></div>",
-                        unsafe_allow_html=True)
+            st.html(f"<div class='kpi'><div class='kpi-label'>{lab}</div>"
+                        f"<div class='kpi-value'>{val}</div><div class='kpi-sub'>{sub}</div></div>")
 
     if health:
-        st.markdown(f"<div class='sect'>数据体检<small>{'发现 ' + str(_warn_n) + ' 处需要注意' if _warn_n else '没有明显问题'}</small></div>",
-                    unsafe_allow_html=True)
+        st.html(f"<div class='sect'>数据体检<small>{'发现 ' + str(_warn_n) + ' 处需要注意' if _warn_n else '没有明显问题'}</small></div>")
         for i in range(0, len(health), 3):
             row = health[i:i + 3]
             hc = st.columns(3)
@@ -2101,13 +2080,12 @@ if _sec == "数据与口径":
                 color = {"warn": "#C08A3E", "ok": "#4F7A55", "info": BI_BLUE}[it["level"]]
                 icon = {"warn": "⚠", "ok": "✓", "info": "ⓘ"}[it["level"]]
                 with hc[j]:
-                    st.markdown(
+                    st.html(
                         f"<div class='hcard' style='border-left-color:{color}'>"
                         f"<div class='hhead' style='color:{color}'>{icon} {it['title']}</div>"
-                        f"<div class='htext'>{it['text']}</div></div>", unsafe_allow_html=True)
+                        f"<div class='htext'>{it['text']}</div></div>")
 
-    st.markdown("<div class='sect'>自定义指标<small>公式自己写，口径自己定</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>自定义指标<small>公式自己写，口径自己定</small></div>")
     if "_custom" not in st.session_state:
         st.session_state["_custom"] = []
     with st.form("cm_form"):
@@ -2139,9 +2117,9 @@ if _sec == "数据与口径":
             with _cols[_i % len(_cols)]:
                 _shown = CM.fmt_value(_v) if not _err else "—"
                 _sub = _it["expr"][:40] if not _err else _err[:32]
-                st.markdown(f"<div class='kpi'><div class='kpi-label'>{_it['name']}</div>"
+                st.html(f"<div class='kpi'><div class='kpi-label'>{_it['name']}</div>"
                             f"<div class='kpi-value'>{_shown}</div>"
-                            f"<div class='kpi-sub'>{_sub}</div></div>", unsafe_allow_html=True)
+                            f"<div class='kpi-sub'>{_sub}</div></div>")
         _del_cols = st.columns(min(4, len(_rows)))
         for _i, (_it, _v, _err) in enumerate(_rows):
             with _del_cols[_i % len(_del_cols)]:
@@ -2150,8 +2128,7 @@ if _sec == "数据与口径":
                                                    if c["name"] != _it["name"]]
                     st.rerun()
 
-    st.markdown("<div class='sect'>指标口径字典<small>每个数字是怎么算出来的</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>指标口径字典<small>每个数字是怎么算出来的</small></div>")
     render_metric_dict(metric, qty_c, cost_c, oc, dc, refund_mode, gran,
                        order_key_mode, tie_mode, aov_mode, cost_force,
                        with_editor=True, with_table=False)

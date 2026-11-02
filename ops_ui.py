@@ -18,7 +18,7 @@ import streamlit as st
 
 import analytics as AN
 import retail_ops as RO
-from style import BAD, BI_BLUE, BI_NAVY, GRID, GOOD, MUTED, TEXT, WARN, fig_base, fmt
+from style import BAD, BI_BLUE, BI_NAVY, GOOD, MUTED, TEXT, WARN, fig_base, fmt
 
 _BAD, _WARN, _OK = BAD, WARN, GOOD
 _TONE = {"bad": _BAD, "warn": _WARN, "ok": _OK}
@@ -27,10 +27,14 @@ _TONE = {"bad": _BAD, "warn": _WARN, "ok": _OK}
 _FIXED_DEMO = {"rent": 6000, "labor": 19000, "utility": 2200, "dep": 800, "other": 800}
 _FIXED_LABEL = {"rent": "房租", "labor": "人工", "utility": "水电", "dep": "折旧摊销", "other": "其他固定"}
 
+# 这些字段能从 POS 明细重算；换数据时重置它们，但不动用户手填的成本项
+_DATA_KEYS = ["days", "sales", "cogs", "orders", "qty", "sku_active", "sku_sold", "sku_oos",
+              "mom_sales", "mom_traffic", "mom_aov"]
+
 
 # ---------------------------------------------------------------- 小组件
 def _sect(t: str, sub: str = ""):
-    st.markdown(f"<div class='sect'>{t}<small>{sub}</small></div>", unsafe_allow_html=True)
+    st.html(f"<div class='sect'>{t}<small>{sub}</small></div>")
 
 
 def _kpi(items, cols: int | None = None):
@@ -41,11 +45,10 @@ def _kpi(items, cols: int | None = None):
         cs = st.columns(len(chunk))
         for c, (lab, val, sub, tone) in zip(cs, chunk):
             color = {"ok": _OK, "warn": _WARN, "bad": _BAD}.get(tone or "", BI_NAVY)
-            c.markdown(
+            c.html(
                 f"<div class='kpi'><div class='kpi-label'>{_html.escape(lab)}</div>"
                 f"<div class='kpi-value' style='color:{color}'>{val}</div>"
-                f"<div class='kpi-sub'>{_html.escape(sub)}</div></div>",
-                unsafe_allow_html=True)
+                f"<div class='kpi-sub'>{_html.escape(sub)}</div></div>")
 
 
 def _money(v) -> str:
@@ -61,7 +64,11 @@ def _pct(v, d: int = 1) -> str:
 
 
 def _table(headers, rows, aligns=None, widths=None, caption=""):
-    """轻量 HTML 表：贴在卡片里，比 st.dataframe 更贴合这套暖陶土视觉。"""
+    """轻量 HTML 表：贴在卡片里，比 st.dataframe 更贴合这套暖陶土视觉。
+
+    只输出**单个根节点**的 HTML，样式统一放 ui.css 的 .ops-tbl——
+    在 st.markdown 里夹 <style> 会让 React 卸载节点时找不到子节点（removeChild）。
+    """
     aligns = aligns or ["left"] * len(headers)
     widths = widths or [None] * len(headers)
     th = "".join(
@@ -73,17 +80,11 @@ def _table(headers, rows, aligns=None, widths=None, caption=""):
             f"<td style='text-align:{a}'>{c}</td>" for c, a in zip(r, aligns))
         body.append(f"<tr>{tds}</tr>")
     html = (
-        "<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;"
-        "font-size:12.5px;line-height:1.6'>"
-        f"<thead><tr>{th}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
-        "<style>"
-        ".ops-tbl th{padding:7px 8px;color:#6E685E;font-weight:600;font-size:11.5px;"
-        "border-bottom:1px solid #E8E2D8;white-space:nowrap;background:#FCFAF6}"
-        ".ops-tbl td{padding:6px 8px;border-bottom:1px solid #F1EBE1;vertical-align:top}"
-        "</style>")
+        "<div class='ops-tbl-wrap'><table class='ops-tbl'>"
+        f"<thead><tr>{th}</tr></thead><tbody>{''.join(body)}</tbody></table></div>")
     if caption:
         html += f"<div style='font-size:11.5px;color:{MUTED};margin-top:6px'>{caption}</div>"
-    return html.replace("<table ", "<table class='ops-tbl' ", 1)
+    return html
 
 
 def _pill(text: str, tone: str = "") -> str:
@@ -99,15 +100,14 @@ def _verdict(tone: str, tag: str, title: str, why: str, chips: list[tuple[str, s
         f"<span style='display:inline-block;padding:3px 10px;border-radius:12px;"
         f"background:#F4EFE6;color:#4A453D;font-size:11.5px;margin:0 6px 4px 0'>{k} <b>{v}</b></span>"
         for k, v in chips)
-    st.markdown(
+    st.html(
         f"<div style='background:#fff;border:1px solid #E8E2D8;border-top:4px solid {c};"
         f"border-radius:12px;padding:18px 20px;margin:6px 0 10px;box-shadow:0 1px 2px rgba(42,39,35,.04)'>"
         f"<div style='font-size:11px;letter-spacing:.18em;color:{MUTED}'>{_html.escape(tag)}</div>"
         f"<div style='font-size:24px;font-weight:600;color:{TEXT};margin:6px 0 8px;line-height:1.35'>"
         f"{_html.escape(title)}</div>"
         f"<div style='font-size:13px;color:#4A453D;line-height:1.85'>{_html.escape(why)}</div>"
-        f"<div style='margin-top:10px'>{chip_html}</div></div>",
-        unsafe_allow_html=True)
+        f"<div style='margin-top:10px'>{chip_html}</div></div>")
 
 
 # ---------------------------------------------------------------- 默认值
@@ -168,14 +168,13 @@ def _inputs(defaults):
     for k in keys:
         st.session_state.setdefault(f"ops_{k}", defaults[k])
 
-    st.markdown(
+    st.html(
         "<div class='insight' style='border-left-color:#5F7A96'>"
         "<b>这些数从哪来</b>：销售额、销货成本、订单数、件数、天数由左侧选定的列自动汇总；"
         "<b>库存、报损、固定开销、面积、人数</b>在 POS 明细里没有，必须按门店实际填。"
         "固定开销首次进入时按社区便利店常见水平<b>预填示例值</b>（房租 6000、人工 19000…），"
         "不改成你的实际成本，保本点和净利都不作数；库存填 0 表示「不知道」，"
-        "周转类指标会显示「待填」而不是编一个数出来。</div>",
-        unsafe_allow_html=True)
+        "周转类指标会显示「待填」而不是编一个数出来。</div>")
 
     with st.expander("① 整店流水与固定开销（默认已按当前数据填好）", expanded=True):
         c1, c2, c3, c4 = st.columns(4)
@@ -265,10 +264,9 @@ def _render_diagnosis(m, dg, ctx):
             f"letter-spacing:.06em;padding:2px 7px;border-radius:4px'>{a['priority']}</span>"
             f"<span style='font-size:14px;font-weight:600;color:{TEXT}'>{_html.escape(a['title'])}</span>"
             f"<span style='margin-left:auto;font-size:12px;color:{MUTED}'>{imp_txt}</span></div>")
-        st.markdown(
+        st.html(
             f"<div style='background:#fff;border:1px solid #E8E2D8;border-left:3px solid {c};"
-            f"border-radius:10px;padding:12px 14px;margin:8px 0 0'>{head}</div>",
-            unsafe_allow_html=True)
+            f"border-radius:10px;padding:12px 14px;margin:8px 0 0'>{head}</div>")
         with st.expander("看判断依据 / 动作 / 验证指标", expanded=(a["priority"] == "P0")):
             st.markdown("**判断依据**")
             for b in a["basis"]:
@@ -292,21 +290,20 @@ def _render_diagnosis(m, dg, ctx):
                 _html.escape(p["val"]),
                 f"<span style='color:{MUTED}'>{_html.escape(p['note'])}</span>",
             ])
-        st.markdown(_table(["判定", "门槛", "当前值", "说明"], rows,
-                           aligns=["left", "left", "left", "left"]), unsafe_allow_html=True)
+        st.html(_table(["判定", "门槛", "当前值", "说明"], rows,
+                           aligns=["left", "left", "left", "left"]))
     with right:
         _sect("不建议做的事", "这一栏比行动清单更能说明判断力")
         if dg["not_do"]:
             for n in dg["not_do"]:
-                st.markdown(
+                st.html(
                     f"<div style='background:#FBF8F2;border-left:3px solid {_BAD};"
                     f"border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px;font-size:12.5px'>"
-                    f"<b>{_html.escape(n['t'])}</b>：{_html.escape(n['d'])}</div>",
-                    unsafe_allow_html=True)
+                    f"<b>{_html.escape(n['t'])}</b>：{_html.escape(n['d'])}</div>")
         else:
-            st.markdown(
+            st.html(
                 f"<div style='font-size:12.5px;color:{MUTED}'>当前没有明确的「不要做」事项，"
-                "但任何动作都要先算增量线再执行。</div>", unsafe_allow_html=True)
+                "但任何动作都要先算增量线再执行。</div>")
 
 
 # ---------------------------------------------------------------- 页签：盈利模型
@@ -326,7 +323,7 @@ def _tab_profit(m, fixed_items):
     ))
     fig_base(fig, 360, "五层减法：钱在哪一层被决定")
     fig.update_layout(showlegend=False)
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key="ops_wf")
 
     c1, c2 = st.columns(2)
     with c1:
@@ -341,22 +338,21 @@ def _tab_profit(m, fixed_items):
         fig2.add_vline(x=m["be_daily"], line_dash="dash", line_color="#3F382D")
         fig_base(fig2, 190, None, legend=True)
         fig2.update_layout(barmode="overlay", bargap=0.45)
-        st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False}, key="ops_be")
         gap = m["daily_sales"] - m["be_daily"]
         gap_orders = int(gap / m["aov"]) if m["aov"] else 0
-        st.markdown(
+        st.html(
             f"<div style='font-size:12.5px;color:{MUTED};line-height:1.8'>"
             f"保本销售额 <b>{_money(m['be_sales'])}</b>，保本日均 <b>{_money(m['be_daily'])}</b>；"
             f"实际日均 <b>{_money(m['daily_sales'])}</b>，每天还能少卖 "
-            f"<b>{_money(gap)}</b>（约 {gap_orders} 单）才碰到保本线。</div>",
-            unsafe_allow_html=True)
+            f"<b>{_money(gap)}</b>（约 {gap_orders} 单）才碰到保本线。</div>")
     with c2:
         _sect("固定费用结构", "不随销售额变化的钱，按每月口径")
         rows = [[_FIXED_LABEL[k], _money(v), _pct(v / m["sales_month"] if m["sales_month"] else 0),
                  _pct(v / m["fixed_month"] if m["fixed_month"] else 0)] for k, v in fixed_items]
         rows.append(["合计", _money(m["fixed_month"]), _pct(m["fixed_ratio"]), "100%"])
-        st.markdown(_table(["项目", "金额/月", "占销售额", "占固定费用"], rows,
-                           aligns=["left", "right", "right", "right"]), unsafe_allow_html=True)
+        st.html(_table(["项目", "金额/月", "占销售额", "占固定费用"], rows,
+                           aligns=["left", "right", "right", "right"]))
 
     _sect("敏感性矩阵", "销售额与毛利率同时动，才知道安全垫有多薄")
     ds, gs = [-0.1, -0.05, 0, 0.05, 0.1], [-0.03, 0, 0.03]
@@ -369,8 +365,8 @@ def _tab_profit(m, fixed_items):
             color = _BAD if np_ < 0 else TEXT
             cells.append(f"<span style='color:{color}'>{_money(np_)}</span>")
         rows.append([f"{d * 100:+.0f}%"] + cells)
-    st.markdown(_table(["销售额变化", "毛利率 −3pt", "毛利率不变", "毛利率 +3pt"], rows,
-                       aligns=["left", "right", "right", "right"]), unsafe_allow_html=True)
+    st.html(_table(["销售额变化", "毛利率 −3pt", "毛利率不变", "毛利率 +3pt"], rows,
+                       aligns=["left", "right", "right", "right"]))
     st.caption(f"经营杠杆 DOL = {m['dol']:.2f}：销售额每降 1%，经营利润降约 {m['dol']:.2f}%。"
                "固定费用不跟着销售下降，这就是老板为 3% 下滑睡不着的真实原因。")
 
@@ -379,12 +375,11 @@ def _tab_profit(m, fixed_items):
 def _tab_eff(m, extra):
     _sect("效率指标一览", "同一组数，换个口径就是另一个结论——口径写在最后一列")
     if not m["inv_known"]:
-        st.markdown(
+        st.html(
             f"<div class='insight' style='border-left-color:{_WARN}'>"
             "<b>周转类指标待填</b>：POS 明细里没有库存，所以「周转率 / 周转天数 / 年化次数」暂时不算。"
             "在页面顶部填「期末库存（成本价）」后，这几项会自动出现——"
-            "宁可留空，也不用假设值算出一个看起来正常的数。</div>",
-            unsafe_allow_html=True)
+            "宁可留空，也不用假设值算出一个看起来正常的数。</div>")
 
     def st_of(v, good, warn, low_is_good=True):
         if not np.isfinite(v):
@@ -417,8 +412,8 @@ def _tab_eff(m, extra):
         rows.append(["长尾销售占比", _pct(extra["idle_share"]), "≤10%",
                      st_of(extra["idle_share"], 0.10, 0.20),
                      f"超 45 天无销售 SKU 的销售额 ÷ 总销售额（{extra['idle_n']} 个）"])
-    st.markdown(_table(["指标", "当前值", "参考区间", "状态", "计算口径"], rows,
-                       aligns=["left", "right", "right", "left", "left"]), unsafe_allow_html=True)
+    st.html(_table(["指标", "当前值", "参考区间", "状态", "计算口径"], rows,
+                       aligns=["left", "right", "right", "left", "left"]))
     st.caption("参考区间是社区便利业态经验值，用于判断方向，不是考核标准；换城市、换商圈要重设基准。")
 
     c1, c2 = st.columns(2)
@@ -433,11 +428,10 @@ def _tab_eff(m, extra):
                              value=float(round(m["turn_annual"], 1)) or 12.0,
                              step=1.0, key="ops_eff_turn")
         ygp = cap * gmv / 100 * tn
-        st.markdown(
+        st.html(
             f"<div class='kpi'><div class='kpi-label'>年毛利 = 投入 × 毛利率 × 周转</div>"
             f"<div class='kpi-value' style='color:{BI_NAVY}'>{_money(ygp)}</div>"
-            f"<div class='kpi-sub'>折算每月 {_money(ygp / 12)}</div></div>",
-            unsafe_allow_html=True)
+            f"<div class='kpi-sub'>折算每月 {_money(ygp / 12)}</div></div>")
         st.caption("这就是为什么大卖场敢把毛利率压到十几个点：它靠周转把钱赚回来。")
     with c2:
         _sect("现金周期", "存货周转天数 + 应收 − 应付")
@@ -446,11 +440,10 @@ def _tab_eff(m, extra):
         ap = st.number_input("应付天数", min_value=0.0, value=15.0, step=1.0, key="ops_cc_ap")
         cc = m["turn_days"] + ar - ap
         tone = _OK if cc < 0 else (_BAD if cc > 30 else _WARN)
-        st.markdown(
+        st.html(
             f"<div class='kpi'><div class='kpi-label'>现金周期</div>"
             f"<div class='kpi-value' style='color:{tone}'>{cc:,.0f} 天</div>"
-            f"<div class='kpi-sub'>{'先收钱后付货款，占用的是供应商的钱' if cc < 0 else '每卖一轮要先垫资，扩张会吃现金'}</div></div>",
-            unsafe_allow_html=True)
+            f"<div class='kpi-sub'>{'先收钱后付货款，占用的是供应商的钱' if cc < 0 else '每卖一轮要先垫资，扩张会吃现金'}</div></div>")
         st.caption("一旦开始给企业客户账期（团购、月结），这个数会立刻变正。")
 
 
@@ -500,7 +493,7 @@ def _tab_goods(df, metric, qty_col, cost_col, date_col, key_col, cost_force, m):
                                       showgrid=False, ticksuffix="%", tickfont=dict(color=MUTED, size=10)))
         fig_base(fig, 320, "销售额与累计占比", legend=True)
         fig.update_xaxes(showticklabels=False)
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key="ops_pareto")
     with c2:
         _sect("ABC × XYZ", "贡献 × 波动，两个维度才够用")
         strat = {"AX": "固定量定期订", "AY": "按同期+趋势订", "AZ": "小批量高频",
@@ -514,7 +507,7 @@ def _tab_goods(df, metric, qty_col, cost_col, date_col, key_col, cost_force, m):
                 row.append(f"<b>{len(sub)}</b><br><span style='color:{MUTED};font-size:11px'>"
                            f"{strat[a + x]}</span>")
             rows.append(row)
-        st.markdown(_table(["", "X 稳定", "Y 季节", "Z 不规则"], rows), unsafe_allow_html=True)
+        st.html(_table(["", "X 稳定", "Y 季节", "Z 不规则"], rows))
         st.caption("格子里的数字是 SKU 个数；策略直接对应订货动作，不是好坏标签。")
 
     _sect("SKU 明细与处置建议", "按销售额降序；处置建议由规则生成，不替代现场判断")
@@ -523,10 +516,12 @@ def _tab_goods(df, metric, qty_col, cost_col, date_col, key_col, cost_force, m):
     view["建议"] = [
         "淘汰" if (a == "C" and s < 0.004) else ("缩排面" if a == "C" else ("保供" if a == "A" else "维持"))
         for a, s in zip(view["ABC"], view["占比"])]
-    show = view[["商品", "销量", "销售额", "占比", "毛利率", "ABC", "XYZ", "建议"]].head(40)
-    st.dataframe(
-        show.style.format({"销量": "{:,.0f}", "销售额": "{:,.0f}", "占比": "{:.1%}", "毛利率": "{:.1%}"}),
-        width="stretch", hide_index=True)
+    show = view[["商品", "销量", "销售额", "占比", "毛利率", "ABC", "XYZ", "建议"]].head(40).copy()
+    show["销量"] = show["销量"].map(lambda v: f"{v:,.0f}")
+    show["销售额"] = show["销售额"].map(lambda v: f"{v:,.0f}")
+    show["占比"] = show["占比"].map(lambda v: f"{v:.1%}")
+    show["毛利率"] = show["毛利率"].map(lambda v: f"{v:.1%}")
+    st.dataframe(show, width="stretch", hide_index=True, key="ops_sku_table")
 
     _sect("清退清单", "先砍「C 类 + 贡献极低」的 SKU：释放货架与资金，比打折清库更快")
     cand = view[(view["ABC"] == "C") & (view["占比"] < 0.004)].sort_values("销售额")
@@ -534,13 +529,17 @@ def _tab_goods(df, metric, qty_col, cost_col, date_col, key_col, cost_force, m):
         st.caption("当前没有明显该清的 SKU：C 类的销售占比与贡献都在合理范围。")
     else:
         est = m["close_inv"] * (cand["成本"].sum() / (g["成本"].sum() or 1))
-        st.markdown(_table(
+        st.html(_table(
             ["商品", "销售额", "销售占比", "毛利率", "建议"],
             [[_html.escape(r["商品"]), _money(r["销售额"]), _pct(r["占比"]),
               _pct(r["毛利率"]), "清退"] for _, r in cand.head(12).iterrows()],
-            aligns=["left", "right", "right", "right", "left"]), unsafe_allow_html=True)
-        st.caption(f"这 {min(12, len(cand))} 个 SKU 合计销售占比 {_pct(cand.head(12)['占比'].sum())}，"
-                   f"按期末库存成本估算占用约 {_money(est)}（估算口径：按销货成本占比分摊）。")
+            aligns=["left", "right", "right", "right", "left"]))
+        _cap = (f"这 {min(12, len(cand))} 个 SKU 合计销售占比 {_pct(cand.head(12)['占比'].sum())}，"
+                f"按期末库存成本估算占用约 {_money(est)}（按销货成本占比分摊）。"
+                if m["inv_known"] else
+                f"这 {min(12, len(cand))} 个 SKU 合计销售占比 {_pct(cand.head(12)['占比'].sum())}；"
+                "期末库存没填，暂时估不出释放多少资金。")
+        st.caption(_cap)
 
 
 # ---------------------------------------------------------------- 订货
@@ -582,8 +581,8 @@ def _tab_order(df, metric, qty_col, date_col, key_col):
         oo = RO.order_point(d_, lead, cv_in, cover, 0, 0)
         rows.append([_html.escape(str(k)), f"{d_:.1f}", f"{d_ * lead:.0f}",
                      f"{oo['safety']:.1f}", f"{oo['rop']:.1f}", f"{oo['target']:.0f}"])
-    st.markdown(_table(["商品", "日均", "交货期用量", "安全库存", "订货点", "目标库存"], rows,
-                       aligns=["left", "right", "right", "right", "right", "right"]), unsafe_allow_html=True)
+    st.html(_table(["商品", "日均", "交货期用量", "安全库存", "订货点", "目标库存"], rows,
+                       aligns=["left", "right", "right", "right", "right", "right"]))
     st.caption("目标库存按你设的覆盖天数算；实际下单要扣掉现有库存和在途。")
 
     _sect("鲜食订货：用报废成本倒推（报童模型）", "最优服务水平 = 毛利 ÷（毛利 + 成本），数值上等于毛利率")
@@ -591,11 +590,10 @@ def _tab_order(df, metric, qty_col, date_col, key_col):
     price = a.number_input("售价（元）", min_value=0.01, value=12.0, step=0.5, key="ops_nb_price")
     cost = b.number_input("成本（元）", min_value=0.0, value=7.0, step=0.5, key="ops_nb_cost")
     nb = RO.newsboy(price, cost)
-    st.markdown(
+    st.html(
         f"<div style='font-size:13px;line-height:1.9'>最优服务水平 <b>{_pct(nb['service'])}</b>："
         f"只订到「有 {_pct(nb['service'])} 的把握能卖完」的量，也就是低于中位需求。"
-        f"毛利率越低越该订得保守——多订一个损失全部成本，少卖一个只损失一点毛利。</div>",
-        unsafe_allow_html=True)
+        f"毛利率越低越该订得保守——多订一个损失全部成本，少卖一个只损失一点毛利。</div>")
 
 
 # ---------------------------------------------------------------- 促销
@@ -609,14 +607,13 @@ def _tab_promo(m):
 
     tone = "bad" if sim["verdict"].startswith("不可行") else ("warn" if "有条件" in sim["verdict"] else "ok")
     tc = _TONE[tone]
-    st.markdown(
+    st.html(
         f"<div style='background:#fff;border:1px solid #E8E2D8;border-left:4px solid {tc};"
         f"border-radius:10px;padding:14px 16px;margin-bottom:10px'>"
         f"<div style='font-size:14px;font-weight:600;color:{tc}'>{_html.escape(sim['verdict'])}</div>"
         f"<div style='font-size:12.5px;color:{MUTED};margin-top:4px'>"
         f"折后毛利率 {_pct(sim['gm_new'])}；促销打平需增量 {_pct(sim['need_lift_promo'])}；"
-        f"门店回到保本线需增量 {_pct(sim['need_lift_store'])}</div></div>",
-        unsafe_allow_html=True)
+        f"门店回到保本线需增量 {_pct(sim['need_lift_store'])}</div></div>")
 
     _kpi([
         ("折后毛利率", _pct(sim["gm_new"]), f"原 {_pct(m['gm'])}", "bad" if sim["gm_new"] < 0.25 else "warn"),
@@ -636,8 +633,8 @@ def _tab_promo(m):
         s2 = RO.promo_sim(m, dd * 100, up)
         rows.append([name, _pct(dd), _pct(s2["gm_new"]),
                      _pct(s2["need_lift_promo"]) if np.isfinite(s2["need_lift_promo"]) else "—", note])
-    st.markdown(_table(["方式", "实际折扣", "折后毛利率", "打平需增量", "说明"], rows,
-                       aligns=["left", "right", "right", "right", "left"]), unsafe_allow_html=True)
+    st.html(_table(["方式", "实际折扣", "折后毛利率", "打平需增量", "说明"], rows,
+                       aligns=["left", "right", "right", "right", "left"]))
     st.caption("折后毛利率用的是精确式（毛利率−折扣率）÷（1−折扣率），不是直接相减——"
                "45.7% 打八折是 32.1%，不是 25.7%，差 6 个点足以把「能做」判成「不能做」。")
 
@@ -650,13 +647,13 @@ def _tab_dict():
         groups.setdefault(r["分组"], []).append(r)
     for gname, items in groups.items():
         _sect(gname, f"{len(items)} 项")
-        st.markdown(_table(
+        st.html(_table(
             ["指标", "层级", "公式 / 计算口径", "单位", "口径分歧 / 注意"],
             [[f"<b>{_html.escape(i['指标'])}</b>", i["层级"],
               f"<span style='font-family:Consolas,monospace;font-size:11.5px'>{_html.escape(i['公式'])}</span>",
               i["单位"], f"<span style='color:{MUTED}'>{_html.escape(i['口径说明'])}</span>"]
              for i in items],
-            aligns=["left", "left", "left", "left", "left"]), unsafe_allow_html=True)
+            aligns=["left", "left", "left", "left", "left"]))
 
 
 # ---------------------------------------------------------------- 主入口
@@ -676,8 +673,10 @@ def render(df, metric, date_col=None, cost_col=None, qty_col=None, order_col=Non
     sig = f"{metric}|{cost_col}|{qty_col}|{date_col}|{len(df)}|{round(defaults['sales'], 2)}"
     if st.session_state.get("_ops_sig") != sig:
         st.session_state["_ops_sig"] = sig
-        for k, v in defaults.items():
-            st.session_state[f"ops_{k}"] = v
+        # 只重置「从明细算出来」的字段；固定开销、库存、面积、人数是用户手填的，
+        # 换个主指标/日期不该把它们清掉（这是之前的一个坑）
+        for k in _DATA_KEYS:
+            st.session_state[f"ops_{k}"] = defaults[k]
 
     inp = _inputs(defaults)
     m = RO.compute(inp)
@@ -709,7 +708,7 @@ def render(df, metric, date_col=None, cost_col=None, qty_col=None, order_col=Non
     dg = RO.diagnose(m, ctx)
     _render_diagnosis(m, dg, ctx)
 
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+    st.html("<div style='height:6px'></div>")
     t1, t2, t3, t4, t5, t6 = st.tabs(["盈利模型", "效率指标", "商品结构", "库存订货", "促销决策", "口径字典"])
     with t1:
         _tab_profit(m, [(k, inp[k]) for k in _FIXED_LABEL])

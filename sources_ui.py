@@ -31,27 +31,24 @@ def _demo_seed():
 
 
 def render():
-    st.markdown(
+    st.html(
         f"<div style='font-size:23px;font-weight:600;color:{BI_NAVY};letter-spacing:.4px'>数据源与多门店</div>"
         f"<div style='font-size:12.5px;color:{MUTED}'>连接收银系统、管理门店、自动跑批——"
         f"让数据在交易发生时自己进来</div>"
-        f"<div style='height:2px;background:{BI_NAVY};width:44px;margin:8px 0 10px'></div>",
-        unsafe_allow_html=True)
+        f"<div style='height:2px;background:{BI_NAVY};width:44px;margin:8px 0 10px'></div>")
 
-    st.markdown(
+    st.html(
         "<div class='insight' style='border-left-color:#B9812F'>"
         "<b>当前阶段</b>：数据接入走「连接器接口 + 本地 SQLite 持久化」骨架，"
         "内置一个可跑的 SQLite 示例连接器；真实收银系统（银豹/客如云/有赞/科脉）、"
-        "企业微信推送、定时调度是预留接口，见蓝图文档。</div>",
-        unsafe_allow_html=True)
+        "企业微信推送、定时调度是预留接口，见蓝图文档。</div>")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(
         ["① 数据接入", "② 多门店对比", "③ 自动跑批与订阅", "④ 指标中心", "⑤ 数据资产"])
 
     # ---------- ① 数据接入 ----------
     with tab1:
-        st.markdown("<div class='sect'>连接数据源<small>销售 / 库存 / 会员，一次拉取落本地</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>连接数据源<small>销售 / 库存 / 会员，一次拉取落本地</small></div>")
         sources = DS.available_sources()
         for s in sources:
             st.markdown(f"· **{s['label']}**（`{s['key']}`）")
@@ -83,15 +80,13 @@ def render():
                 store = DS.Store()
                 sales = store.load_snapshot(key, "sales")
                 if not sales.empty:
-                    st.markdown(f"<div style='font-size:12.5px;color:{MUTED}'>"
-                                f"已落库销售明细 {len(sales):,} 行（预览）：</div>",
-                                unsafe_allow_html=True)
+                    st.html(f"<div style='font-size:12.5px;color:{MUTED}'>"
+                                f"已落库销售明细 {len(sales):,} 行（预览）：</div>")
                     st.dataframe(sales.head(50), width="stretch", hide_index=True)
 
     # ---------- ② 多门店对比 ----------
     with tab2:
-        st.markdown("<div class='sect'>多门店结构<small>总部—区域—门店 + 数据隔离 + 跨店对比</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>多门店结构<small>总部—区域—门店 + 数据隔离 + 跨店对比</small></div>")
         if st.button("用示例数据演示多门店对比", key="store_demo"):
             db = _demo_seed()
             import sqlite3
@@ -105,38 +100,34 @@ def render():
             if not sales.empty and "门店编码" in sales.columns:
                 cmp = ST.cross_store_compare(sales, "门店编码", "金额")
                 if not cmp.empty:
-                    st.markdown("<div style='font-size:12.5px;color:#6E685E'>各门店销售额对比（总部视角）：</div>",
-                                unsafe_allow_html=True)
+                    st.html("<div style='font-size:12.5px;color:#6E685E'>各门店销售额对比（总部视角）：</div>")
                     st.dataframe(cmp, width="stretch", hide_index=True)
                     top = cmp.iloc[0]
-                    st.markdown(f"<div class='insight'>最高「{top['门店']}」占全部销售的 {top['占比%']}%，"
+                    st.html(f"<div class='insight'>最高「{top['门店']}」占全部销售的 {top['占比%']}%，"
                                 f"最低「{cmp.iloc[-1]['门店']}」占 {cmp.iloc[-1]['占比%']}%——"
-                                f"差距超过一倍的门店值得单独看。</div>", unsafe_allow_html=True)
+                                f"差距超过一倍的门店值得单独看。</div>")
                 else:
                     st.info("示例数据里没识别到门店列。")
             else:
                 st.info("请先在「① 数据接入」拉取示例数据。")
 
-        st.markdown(
+        st.html(
             "<div class='insight'>权限模型（`stores.py`）："
             "店长只看自己店、区域经理看本区域、老板看全部。数据隔离按门店编码过滤，"
-            "不软删、可追溯。真实多租户登录需接后端认证（见蓝图）。</div>",
-            unsafe_allow_html=True)
+            "不软删、可追溯。真实多租户登录需接后端认证（见蓝图）。</div>")
 
     # ---------- ③ 自动跑批与订阅 ----------
     with tab3:
-        st.markdown("<div class='sect'>自动跑批与预警<small>不用主动打开，也能收到关键结论</small></div>",
-                    unsafe_allow_html=True)
-        st.markdown(
+        st.html("<div class='sect'>自动跑批与预警<small>不用主动打开，也能收到关键结论</small></div>")
+        st.html(
             "<div class='insight'>跑批是纯函数（`scheduler.py`），可由任意调度器定时触发。"
-            "这里先手动触发一次，验证「异常预警 → 结论 → 本地通知」全链路。</div>",
-            unsafe_allow_html=True)
+            "这里先手动触发一次，验证「异常预警 → 结论 → 本地通知」全链路。</div>")
 
         c1, c2 = st.columns(2)
         channel = c1.selectbox("推送渠道", list(SC.CHANNELS.keys()),
                                format_func=lambda k: SC.CHANNELS[k], key="sch_chan")
-        c2.markdown(f"<div style='padding-top:30px;color:{MUTED};font-size:12px'>"
-                    f"local 立即落盘；wecom 发企业微信群机器人</div>", unsafe_allow_html=True)
+        c2.html(f"<div style='padding-top:30px;color:{MUTED};font-size:12px'>"
+                    f"local 立即落盘；wecom 发企业微信群机器人</div>")
 
         # 企业微信机器人 webhook 地址（选 wecom 时显示，填一次存本地）
         if channel == "wecom":
@@ -168,20 +159,18 @@ def render():
             else:
                 st.warning(res["msg"])
 
-        st.markdown("<div class='sect'>订阅<small>按 topic 订阅，到点自动推送（结构已就绪）</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>订阅<small>按 topic 订阅，到点自动推送（结构已就绪）</small></div>")
         st.caption("订阅模型存在本地 SQLite（subscriptions 表）：用户 + topic（异常预警/日报/周报）+ 渠道。"
                    "定时触发与真实推送通道接入后即可自动发。")
 
     # ---------- ④ 指标中心 ----------
     with tab4:
         import metric_catalog as MC
-        st.markdown("<div class='sect'>指标中心<small>定义一次、全局复用，跨人跨报表口径一致</small></div>",
-                    unsafe_allow_html=True)
-        st.markdown(
+        st.html("<div class='sect'>指标中心<small>定义一次、全局复用，跨人跨报表口径一致</small></div>")
+        st.html(
             "<div class='insight'>这 9 个指标的公式、单位、口径说明集中在这一份定义里；"
             "概览卡、口径字典、报告、分析包、推送结论都从同一处取，不会出现"
-            "「页面一个数、报告另一个数」的口径漂移。</div>", unsafe_allow_html=True)
+            "「页面一个数、报告另一个数」的口径漂移。</div>")
         rows = MC.catalog_rows()
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
         st.caption(f"指标中心版本 {MC.CATALOG_VERSION}；公式里的 "
@@ -190,12 +179,10 @@ def render():
 
     # ---------- ⑤ 数据资产 ----------
     with tab5:
-        st.markdown("<div class='sect'>数据资产<small>我的数据长什么样——表、字段、关联、质量</small></div>",
-                    unsafe_allow_html=True)
-        st.markdown(
+        st.html("<div class='sect'>数据资产<small>我的数据长什么样——表、字段、关联、质量</small></div>")
+        st.html(
             "<div class='insight'>这是「数据中台/数仓」的轻量落地：不搞重数仓，"
-            "只回答「我有哪些表、每张表有哪些字段、它们怎么关联、数据质量如何」。</div>",
-            unsafe_allow_html=True)
+            "只回答「我有哪些表、每张表有哪些字段、它们怎么关联、数据质量如何」。</div>")
         try:
             store = DS.Store()
             # 从快照表读出已落库的数据
@@ -208,14 +195,13 @@ def render():
                 st.info("还没有拉取过任何数据。先去「① 数据接入」拉一次，这里就能看到数据资产全景。")
             else:
                 latest = snaps.drop_duplicates(subset=["source_key", "kind"], keep="first")
-                st.markdown("<div style='font-size:12.5px;color:#6E685E'>已落库的表（快照）：</div>",
-                            unsafe_allow_html=True)
+                st.html("<div style='font-size:12.5px;color:#6E685E'>已落库的表（快照）：</div>")
                 st.dataframe(latest, width="stretch", hide_index=True)
                 # 字段清单（以最新一次 sales 快照为例）
                 sales = store.load_snapshot(latest.iloc[0]["source_key"], "sales")
                 if not sales.empty:
-                    st.markdown("<div class='sect' style='margin-top:12px'>字段清单（销售明细示例）"
-                                "<small>类型 / 非空 / 示例</small></div>", unsafe_allow_html=True)
+                    st.html("<div class='sect' style='margin-top:12px'>字段清单（销售明细示例）"
+                                "<small>类型 / 非空 / 示例</small></div>")
                     finfo = []
                     for c in sales.columns:
                         s = sales[c]
@@ -277,8 +263,7 @@ def render_source_picker(key_prefix: str = "") -> dict | None:
     key_prefix：同一页面可能有两处入口（侧栏 + 正文）渲染这个表单，
     Streamlit 不允许 widget key 重复，必须用前缀区分。
     """
-    st.markdown("<div class='sect'>连接数据源<small>填接口或选数据源，数据自动拉进来</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>连接数据源<small>填接口或选数据源，数据自动拉进来</small></div>")
 
     keys = list(SOURCE_TYPES.keys())
     stype = st.selectbox(

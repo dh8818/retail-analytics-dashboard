@@ -290,8 +290,7 @@ def _quality_check(df):
 
 
 def render(adv_list, base_text="", ctx=None):
-    st.markdown("<div class='sect'>经营行动与复盘<small>做了什么、效果如何——把分析变成闭环</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>经营行动与复盘<small>做了什么、效果如何——把分析变成闭环</small></div>")
     st.caption("报表回答「发生了什么」，这一页回答「改了什么、结果如何」。"
                "每条行动都有负责人、时间、预期与实际，效果可回溯、可交接。"
                "「基准指标」和「预期效果」会按每行写到的商品 / 品类和动作类型自动推算，改了「问题 / 动作」就跟着实时变。")
@@ -369,11 +368,11 @@ def render(adv_list, base_text="", ctx=None):
 
     done = (edited["状态"] == "已完成").sum() if "状态" in edited else 0
     total = len(edited)
-    st.markdown(
+    st.html(
         f"<div class='insight'>共 <b>{total}</b> 项行动：已完成 {done}，"
         f"进行中 {(edited['状态'] == '进行中').sum()}，待开始 {(edited['状态'] == '待开始').sum()}。"
         + ("　闭环率 {:.0f}%".format(done / total * 100) if total else "")
-        + "</div>", unsafe_allow_html=True)
+        + "</div>")
 
     # ---- 每条行动的「下一步」提示：让复盘活起来，告诉用户此刻该干什么 ----
     with st.expander("👉 每条行动下一步该干什么（按状态自动提示）", expanded=bool(total) and total <= 6):
@@ -381,23 +380,20 @@ def render(adv_list, base_text="", ctx=None):
             hint = _next_step_hint(r)
             icon = {"待开始": "🕐", "进行中": "🚀", "已完成": "✅", "已放弃": "⛔"}.get(
                 str(r.get("状态", "")), "•")
-            st.markdown(
+            st.html(
                 f"<div style='font-size:13px;margin:4px 0;line-height:1.6'>{icon} "
-                f"<b>{str(r.get('问题',''))[:40]}</b> —— {hint}</div>",
-                unsafe_allow_html=True)
+                f"<b>{str(r.get('问题',''))[:40]}</b> —— {hint}</div>")
 
     # ---- 复盘质量体检：点名复盘不成立的行 ----
     issues, _n = _quality_check(edited)
     if issues:
         rows_html = "".join(f"<li style='margin:2px 0'>{t}</li>" for t in issues)
-        st.markdown(
+        st.html(
             "<div class='insight' style='border-left-color:#B9812F'>"
-            f"<b>复盘质量体检（{len(issues)} 处不成立，改了才算复盘）</b><ul style='margin:4px 0 0 18px;padding:0'>{rows_html}</ul></div>",
-            unsafe_allow_html=True)
+            f"<b>复盘质量体检（{len(issues)} 处不成立，改了才算复盘）</b><ul style='margin:4px 0 0 18px;padding:0'>{rows_html}</ul></div>")
     else:
-        st.markdown("<div class='insight' style='border-left-color:#6F8A63'>"
-                    "<b>复盘质量体检通过</b>：每项都有负责人、日期、预期和实际结果。</div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='insight' style='border-left-color:#6F8A63'>"
+                    "<b>复盘质量体检通过</b>：每项都有负责人、日期、预期和实际结果。</div>")
 
     with st.expander("复盘怎么写才有说服力", expanded=False):
         st.markdown(f"""

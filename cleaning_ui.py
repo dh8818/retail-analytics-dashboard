@@ -27,21 +27,19 @@ def render(df_raw, sig):
     has_applied = bool(applied and applied.get("sig") == sig)
     cur = applied["df"] if has_applied else df_raw
 
-    st.markdown(
+    st.html(
         "<div class='insight'><b>怎么用（三步）</b><br>"
         "① 先看下面的「体检表」——它告诉你数据哪里有毛病；<br>"
         "② 点 <b>一键清洗（安全推荐）</b>——去重、去空格、数字和日期转成正确格式，"
         "<b>不会删你的业务数据，也不会编造缺失值</b>；<br>"
-        "③ 如果结果不满意，点 <b>恢复原始数据</b> 就退回原样。</div>",
-        unsafe_allow_html=True)
+        "③ 如果结果不满意，点 <b>恢复原始数据</b> 就退回原样。</div>")
 
-    st.markdown("<div class='sect'>数据体检<small>先看清哪里脏，再决定怎么处理</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>数据体检<small>先看清哪里脏，再决定怎么处理</small></div>")
 
     issues = CL.detect(df_raw)
     if not issues:
-        st.markdown("<div class='insight'>没有发现结构性问题：无重复行、无文本型数字、无空列。"
-                    "仍建议看一眼业务口径（退款、赠品、测试单）。</div>", unsafe_allow_html=True)
+        st.html("<div class='insight'>没有发现结构性问题：无重复行、无文本型数字、无空列。"
+                    "仍建议看一眼业务口径（退款、赠品、测试单）。</div>")
     else:
         rows = ""
         for i in issues:
@@ -50,13 +48,11 @@ def render(df_raw, sig):
                      f"<td>{i['问题']}</td><td class='mono'>{i['定位']}</td>"
                      f"<td style='text-align:right'>{i['数量']:,}</td>"
                      f"<td class='note'>{i['建议']}</td></tr>")
-        st.markdown(
+        st.html(
             "<table class='mdict'><thead><tr><th>级别</th><th>问题</th><th>定位</th>"
-            f"<th style='text-align:right'>数量</th><th>建议</th></tr></thead><tbody>{rows}</tbody></table>",
-            unsafe_allow_html=True)
+            f"<th style='text-align:right'>数量</th><th>建议</th></tr></thead><tbody>{rows}</tbody></table>")
 
-    st.markdown("<div class='sect'>清洗动作<small>点左边那个按钮就够了，右边是给熟手微调的</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>清洗动作<small>点左边那个按钮就够了，右边是给熟手微调的</small></div>")
     st.caption("清洗范围 = 当前筛选后的数据集（时间范围、筛选条件在左侧「4. 分析设置 / 5. 筛选」里调）。")
 
     b1, b2, b3 = st.columns([1.3, 1, 1])
@@ -103,14 +99,12 @@ def render(df_raw, sig):
 
     if has_applied:
         stats = applied["stats"]
-        st.markdown(
+        st.html(
             f"<div class='insight'>已应用清洗：{_stats_line(stats)}<br>"
-            f"下面全站所有分析（KPI、图表、统计、PPT）都基于清洗后的数据。</div>",
-            unsafe_allow_html=True)
+            f"下面全站所有分析（KPI、图表、统计、PPT）都基于清洗后的数据。</div>")
         log = applied.get("log") or []
         if log:
-            st.markdown("<div class='sect'>清洗日志<small>每一步做了什么、影响到哪</small></div>",
-                        unsafe_allow_html=True)
+            st.html("<div class='sect'>清洗日志<small>每一步做了什么、影响到哪</small></div>")
             st.dataframe(pd.DataFrame(log), width="stretch", hide_index=True)
         st.download_button("下载清洗后的数据 CSV", cur.to_csv(index=False).encode("utf-8-sig"),
                            file_name="cleaned.csv", mime="text/csv", key="cl_dl")

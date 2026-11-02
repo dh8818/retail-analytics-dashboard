@@ -181,7 +181,8 @@ def diagnose(m: dict, ctx: dict | None = None) -> dict:
     gate("安全边际 ≥ 5%", be_ok, f"{m['safety']:.1%}", "通过" if be_ok else "不通过：一次促销就能打进亏损")
     gate("安全边际 ≥ 15% 且毛利率 ≥ 30%", can_promo, f"{m['safety']:.1%} · {m['gm']:.1%}",
          "通过：有让利空间" if can_promo else "不通过：先修利润结构")
-    gate("动销率 ≥ 80% 且周转 ≤ 21 天", goods_ok, f"{m['active_rate']:.1%} · {m['turn_days']:.1f} 天",
+    _turn_txt = f"{m['turn_days']:.1f} 天" if m.get("inv_known", True) else "周转未填"
+    gate("动销率 ≥ 80% 且周转 ≤ 21 天", goods_ok, f"{m['active_rate']:.1%} · {_turn_txt}",
          "通过" if goods_ok else "不通过：货架和资金被低效 SKU 占着")
     gate("损耗率 ≤ 2.5%", waste_ok, f"{m['waste_rate']:.1%}", "通过" if waste_ok else "不通过：订货或效期管理有问题")
 
@@ -323,8 +324,10 @@ def diagnose(m: dict, ctx: dict | None = None) -> dict:
                f"把安全边际做到 5% 以上再谈引流。")
     elif not goods_ok:
         level, headline = "warn", "先精简商品，再谈促销"
-        why = (f"店是赚钱的（净利率 {m['net_margin']:.1%}），但钱压在货上："
-               f"周转 {m['turn_days']:.1f} 天、动销率 {m['active_rate']:.1%}。"
+        _stock_txt = (f"周转 {m['turn_days']:.1f} 天" if m.get("inv_known", True)
+                      else "库存还没填（周转算不出来）")
+        why = (f"店是赚钱的（净利率 {m['net_margin']:.1%}），但货架效率不够："
+               f"{_stock_txt}、动销率 {m['active_rate']:.1%}。"
                f"这类店做促销只是把滞销品换个方式打折，毛利更薄。先把不产钱的 SKU 清出去，"
                f"把库存变成现金，再考虑拉新。")
     elif can_promo and decline:

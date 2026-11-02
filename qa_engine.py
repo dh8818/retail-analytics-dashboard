@@ -342,8 +342,7 @@ td{{padding:7px 8px;border-bottom:1px solid #F0EBE3;}} td.num{{text-align:right;
 
 # ---------------- Streamlit UI ----------------
 def render(df, dc, metric, num_cols, cat_cols, big, detail, sheet, kpis, summaries, mode="环比", caliber=None):
-    st.markdown("<div class='sect'>问一句，出结论<small>自动找期间、找维度、做量价拆解、出瀑布图</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>问一句，出结论<small>自动找期间、找维度、做量价拆解、出瀑布图</small></div>")
     if not dc:
         st.info("表里没有识别到时间列，无法做期间对比。")
         return
@@ -366,9 +365,9 @@ def render(df, dc, metric, num_cols, cat_cols, big, detail, sheet, kpis, summari
         st.warning(res["msg"])
         return
 
-    st.markdown("<div class='qbox'>问：" + q + "</div>", unsafe_allow_html=True)
+    st.html("<div class='qbox'>问：" + q + "</div>")
     for line in res["lines"]:
-        st.markdown(f"<div class='insight'>{line}</div>", unsafe_allow_html=True)
+        st.html(f"<div class='insight'>{line}</div>")
 
     figs = res["figs"]
     if figs:

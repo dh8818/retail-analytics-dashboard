@@ -107,8 +107,7 @@ def _examples(cols):
 
 
 def render_sql(df):
-    st.markdown("<div class='sect'>SQL 查询台<small>上传的表 = 表名 t，支持窗口函数、CTE、子查询</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>SQL 查询台<small>上传的表 = 表名 t，支持窗口函数、CTE、子查询</small></div>")
     st.caption("只读：只接受 SELECT / WITH；结果最多 5000 行。列名含中文或空格时用双引号包起来。")
 
     with st.expander("查看可用列名", expanded=False):
@@ -128,8 +127,7 @@ def render_sql(df):
     if err:
         st.error(f"查询失败：{err}")
     elif res is not None:
-        st.markdown(f"<div style='font-size:12.5px;color:{MUTED}'>结果 {len(res):,} 行 × {len(res.columns)} 列</div>",
-                    unsafe_allow_html=True)
+        st.html(f"<div style='font-size:12.5px;color:{MUTED}'>结果 {len(res):,} 行 × {len(res.columns)} 列</div>")
         st.dataframe(res, width="stretch", hide_index=True)
         nums = [c for c in res.columns if pd.api.types.is_numeric_dtype(res[c])]
         if nums and len(res) <= 200:
@@ -150,8 +148,7 @@ def render_sql(df):
 
 def render_ask(df, schema):
     """用一句话问数据：中文 → SQL → 结果 → 导出。"""
-    st.markdown("<div class='sect'>用一句话问数据<small>说人话，自动写 SQL 并出结果</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>用一句话问数据<small>说人话，自动写 SQL 并出结果</small></div>")
     st.caption("比如：上个月各品类销售额 / 最近 30 天销量最高的商品 / 8 月饮料卖了多少 / 各品类毛利率")
 
     examples = ["上个月各品类销售额", "最近 30 天销量最高的商品",
@@ -189,7 +186,7 @@ def render_ask(df, schema):
                    "+「时间（上个月/近 30 天/8 月）」。")
         return
 
-    st.markdown(f"<div class='insight'>我的理解：{parsed['explain']}</div>", unsafe_allow_html=True)
+    st.html(f"<div class='insight'>我的理解：{parsed['explain']}</div>")
     with st.expander("查看生成的 SQL", expanded=False):
         st.code(parsed["sql"], language="sql")
     if err:
@@ -199,8 +196,7 @@ def render_ask(df, schema):
         st.info("查询没有返回数据：可能是这个时间范围内没有记录，或筛选条件太严。")
         return
 
-    st.markdown(f"<div style='font-size:12.5px;color:{MUTED}'>结果 {len(out):,} 行</div>",
-                unsafe_allow_html=True)
+    st.html(f"<div style='font-size:12.5px;color:{MUTED}'>结果 {len(out):,} 行</div>")
     st.dataframe(out, width="stretch", hide_index=True)
 
     nums = [c for c in out.columns if pd.api.types.is_numeric_dtype(out[c])]

@@ -20,9 +20,8 @@ def kpi_row(items, cols=6):
     cs = st.columns(min(cols, max(len(items), 1)))
     for i, (lab, val, sub) in enumerate(items[:cols]):
         with cs[i]:
-            st.markdown(f"<div class='kpi'><div class='kpi-label'>{lab}</div>"
-                        f"<div class='kpi-value'>{val}</div><div class='kpi-sub'>{sub}</div></div>",
-                        unsafe_allow_html=True)
+            st.html(f"<div class='kpi'><div class='kpi-label'>{lab}</div>"
+                        f"<div class='kpi-value'>{val}</div><div class='kpi-sub'>{sub}</div></div>")
 
 
 # ---------------- 订单级 ----------------
@@ -30,8 +29,7 @@ def section_orders(df, oc, metric, qty_col, dc, card, key_mode="auto", tie="qty"
     orders, m = AN.order_metrics(df, oc, metric, qty_col, dc, key_mode, tie, include_refunds)
     if orders is None:
         return
-    st.markdown("<div class='sect'>订单视角<small>客单价、连带率——零售最常被问的三个数</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>订单视角<small>客单价、连带率——零售最常被问的三个数</small></div>")
     kpi_row([("订单数", f"{m['订单数']:,}", "单号去重"),
              ("客单价", fmt(m["客单价"]), "金额 ÷ 订单数"),
              ("连带率", f"{m['连带率']:.2f}", "件数 ÷ 订单数"),
@@ -73,8 +71,7 @@ def section_basket(df, oc, item_col, card):
     rules = perf.get(f"basket:{oc}:{item_col}:{len(df)}", lambda: AN.basket_rules(df, oc, item_col))
     if rules is None or rules.empty:
         return
-    st.markdown("<div class='sect'>购物篮<small>谁跟谁一起买——做套餐和陈列的依据</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>购物篮<small>谁跟谁一起买——做套餐和陈列的依据</small></div>")
     top = rules.head(10).iloc[::-1]
     f = go.Figure(go.Bar(x=list(top["提升度"]), y=[f"{a} + {b}"[:24] for a, b in zip(top["商品A"], top["商品B"])],
                          orientation="h", marker_color=BI_BLUE,
@@ -86,13 +83,11 @@ def section_basket(df, oc, item_col, card):
     with c1:
         card(f, "basket_bar")
     with c2:
-        st.markdown("<div class='sect' style='font-size:13px;margin:0 0 6px'>怎么读这张表</div>",
-                    unsafe_allow_html=True)
-        st.markdown(
+        st.html("<div class='sect' style='font-size:13px;margin:0 0 6px'>怎么读这张表</div>")
+        st.html(
             "<div class='insight'><b>提升度</b>：买 A 的人买 B 的概率 ÷ B 本身的购买率。"
             "1.0 表示没关系，3.0 表示买 A 的人买 B 的概率是普通人的 3 倍。</div>"
-            "<div class='insight'><b>置信度</b>：买了 A 之后再买 B 的比例，用来估套餐的命中率。</div>",
-            unsafe_allow_html=True)
+            "<div class='insight'><b>置信度</b>：买了 A 之后再买 B 的比例，用来估套餐的命中率。</div>")
         st.dataframe(rules.head(10), width="stretch", hide_index=True)
 
 
@@ -102,8 +97,7 @@ def section_margin(df, big, metric, cost_col, card, qty_col=None, force="auto"):
                   lambda: AN.margin_structure(df, big, metric, cost_col, qty_col, force))
     if ms is None or len(ms) < 2:
         return
-    st.markdown("<div class='sect'>毛利结构<small>钱从哪来 ≠ 利润从哪来</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>毛利结构<small>钱从哪来 ≠ 利润从哪来</small></div>")
     d = ms.sort_values("占比差")
     f = go.Figure()
     f.add_trace(go.Bar(x=list(d["金额占比%"]), y=[str(i)[:12] for i in d.index], orientation="h",
@@ -120,9 +114,9 @@ def section_margin(df, big, metric, cost_col, card, qty_col=None, force="auto"):
         show.index = [str(i)[:12] for i in show.index]
         st.dataframe(show, width="stretch")
         top = ms["占比差"].idxmax()
-        st.markdown(f"<div class='insight'>「{top}」的毛利占比比金额占比高 "
+        st.html(f"<div class='insight'>「{top}」的毛利占比比金额占比高 "
                     f"{ms.loc[top,'占比差']:.1f} 个百分点——同样的销售规模，它带来的利润更多，"
-                    f"值得给它更好的货架位置。</div>", unsafe_allow_html=True)
+                    f"值得给它更好的货架位置。</div>")
 
 
 # ---------------- 客户分层 ----------------
@@ -131,8 +125,7 @@ def section_rfm(df, cust_col, dc, metric, card):
     if rfm is None:
         return
     summ = AN.rfm_summary(rfm)
-    st.markdown("<div class='sect'>客户分层（RFM）<small>最近买没买 / 买了几次 / 花了多少</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>客户分层（RFM）<small>最近买没买 / 买了几次 / 花了多少</small></div>")
     c1, c2 = st.columns([3, 2])
     with c1:
         st.dataframe(summ, width="stretch", hide_index=True)
@@ -145,10 +138,9 @@ def section_rfm(df, cust_col, dc, metric, card):
         fig_base(f, 300, "各分层贡献的金额")
         card(f, "rfm_pie")
     worst = summ.iloc[0]
-    st.markdown(f"<div class='insight'>占用金额最多的是「{worst['分层']}」："
+    st.html(f"<div class='insight'>占用金额最多的是「{worst['分层']}」："
                 f"{int(worst['人数']):,} 人（{worst['人数占比%']:.0f}%），贡献 {worst['金额占比%']:.0f}% 的金额。"
-                f"流失预警的客户要优先召回——他们已经买过，召回成本比拉新低得多。</div>",
-                unsafe_allow_html=True)
+                f"流失预警的客户要优先召回——他们已经买过，召回成本比拉新低得多。</div>")
 
 
 # ---------------- 目标达成 ----------------
@@ -183,8 +175,7 @@ def section_target(df, dc, metric, gran, target, card):
     tp = AN.target_progress(g, target, elapsed)
     if tp is None:
         return
-    st.markdown("<div class='sect'>目标达成<small>跟预算比，不跟自己比</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>目标达成<small>跟预算比，不跟自己比</small></div>")
     rate = max(0.0, min(tp["rate"], 200))
     f = go.Figure(go.Indicator(
         mode="gauge+number",
@@ -202,19 +193,18 @@ def section_target(df, dc, metric, gran, target, card):
         card(f, "target_gauge")
     with c2:
         need = max(tp["gap"], 0)
-        st.markdown(
+        st.html(
             f"<div class='insight'>已完成 {tp['rate']:.1f}%，"
             f"{'超出目标 ' + fmt(-tp['gap']) if tp['gap'] < 0 else '还差 ' + fmt(need)}。</div>"
             f"<div class='insight'>按当前速度推算，本期预计达成 <b>{tp['proj_rate']:.0f}%</b>"
-            f"（约 {fmt(tp['run_rate'])}）。</div>", unsafe_allow_html=True)
+            f"（约 {fmt(tp['run_rate'])}）。</div>")
 
 
 # ---------------- 两期对比 ----------------
 def section_compare(df, dc, metric, cat_cols, card):
     if not dc:
         return
-    st.markdown("<div class='sect'>任意两期对比<small>不只看环比，可以挑任意两个时间段</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>任意两期对比<small>不只看环比，可以挑任意两个时间段</small></div>")
     dts = df[dc].dropna()
     if dts.empty:
         return
@@ -241,7 +231,7 @@ def section_compare(df, dc, metric, cat_cols, card):
         st.warning("选的两段时间里没有数据。")
         return
     for line in res["lines"]:
-        st.markdown(f"<div class='insight'>{line}</div>", unsafe_allow_html=True)
+        st.html(f"<div class='insight'>{line}</div>")
     if "delta_series" in res and len(res["delta_series"]) > 1:
         dl = res["delta_series"]
         top = pd.concat([dl.head(5), dl.tail(5)]).drop_duplicates()
@@ -271,8 +261,7 @@ def section_forecast(df, dc, metric, gran, card):
     fc, fit = AN.forecast(s, periods=periods, window=7 if gran == "日" else 3)
     if fc is None:
         return
-    st.markdown("<div class='sect'>预测与异常<small>未来走势 + 哪天不正常</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>预测与异常<small>未来走势 + 哪天不正常</small></div>")
     f = go.Figure()
     f.add_trace(go.Scatter(x=list(s.index), y=list(s.values), name="实际",
                            mode="lines", line=dict(color=BI_BLUE, width=1.4)))
@@ -297,9 +286,8 @@ def section_forecast(df, dc, metric, gran, card):
         bad = an[an["异常"]]
         if len(bad):
             txt = "、".join(str(i) for i in list(bad.index)[:6])
-            st.markdown(f"<div class='insight'>检测到 {len(bad)} 个异常点：{txt}。"
-                        f"先排查当天是不是缺货、系统故障或大促，再决定要不要从趋势里剔除。</div>",
-                        unsafe_allow_html=True)
+            st.html(f"<div class='insight'>检测到 {len(bad)} 个异常点：{txt}。"
+                        f"先排查当天是不是缺货、系统故障或大促，再决定要不要从趋势里剔除。</div>")
 
 
 # ---------------- 折扣与退货 ----------------
@@ -318,16 +306,14 @@ def section_discount(df, metric, qty_col, price_col, cat_col, card):
     d["_give"] = diff.where(disc_rows, 0.0)
     d["_is_disc"] = disc_rows
 
-    st.markdown("<div class='sect'>折扣与退货<small>让了多少利、退了多少货</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>折扣与退货<small>让了多少利、退了多少货</small></div>")
     total_amt = float(amt[amt > 0].sum())
     give = float(d["_give"].sum())
-    st.markdown(
+    st.html(
         f"<div class='insight'>有 <b>{int(disc_rows.sum()):,}</b> 行成交价低于 单价×数量"
         f"（占 {disc_rows.mean()*100:.1f}%），合计让利 <b>{fmt(give)}</b>，"
         f"相当于销售额的 {give/max(total_amt,1e-9)*100:.1f}%。"
-        f"这些行就是表里的折扣记录——之前只当数据质量问题报，其实能直接算折扣深度。</div>",
-        unsafe_allow_html=True)
+        f"这些行就是表里的折扣记录——之前只当数据质量问题报，其实能直接算折扣深度。</div>")
 
     if cat_col:
         g = d[valid].groupby(cat_col).agg(销售额=(metric, "sum"), 让利=("_give", "sum"),

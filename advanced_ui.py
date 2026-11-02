@@ -14,7 +14,7 @@ def _num(s):
 
 
 def _sect(title, sub=""):
-    st.markdown(f"<div class='sect'>{title}<small>{sub}</small></div>", unsafe_allow_html=True)
+    st.html(f"<div class='sect'>{title}<small>{sub}</small></div>")
 
 
 def _fmt_p(p):
@@ -30,12 +30,12 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
     # 综合结论：各块算出结果后，往里追加一句话，最后在页面末尾统一渲染
     _summary = []
 
-    st.markdown(
+    st.html(
         "<div class='insight'><b>这一页是干什么的（一句话）</b><br>"
         "前面的页面回答「卖了多少、谁卖得好」；这一页回答两件事："
         "<b>为什么会这样</b>，以及<b>这个差别是真的、还是运气</b>。<br>"
         "举个例子：A 店比 B 店多卖 8%，可能是管理好，也可能只是那几天人多——"
-        "这一页就是用数据把这两种可能分开。</div>", unsafe_allow_html=True)
+        "这一页就是用数据把这两种可能分开。</div>")
 
     _cards = [
         ("描述统计", "先看清「正常」长什么样", "均值被几笔大单拉高时，中位数才不骗人"),
@@ -46,12 +46,11 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
     _cols = st.columns(4)
     for _i, (_t, _q, _a) in enumerate(_cards):
         with _cols[_i]:
-            st.markdown(
+            st.html(
                 f"<div class='sumcard' style='min-height:118px'>"
                 f"<div style='font-size:13.5px;font-weight:600;color:#B85532'>{_t}</div>"
                 f"<div style='font-size:12.5px;color:#2A2723;margin:6px 0'>{_q}</div>"
-                f"<div style='font-size:11.5px;color:#6E685E'>{_a}</div></div>",
-                unsafe_allow_html=True)
+                f"<div style='font-size:11.5px;color:#6E685E'>{_a}</div></div>")
 
     st.caption("什么时候这一页用不上：数据不足三个月、没有会员/订单级字段、样本太小（每组不到 30 条）。"
                "这时候模型给的是参考，不能当结论。")
@@ -94,14 +93,14 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
             res = SM.welch_ttest(ga, gb)
             if res:
                 sig = res["p"] < 0.05
-                st.markdown(
+                st.html(
                     f"<div class='insight'><b>{a}</b> 均值 {fmt(res['mean_a'])}（n={res['n_a']:,}） vs "
                     f"<b>{b_val}</b> 均值 {fmt(res['mean_b'])}（n={res['n_b']:,}）<br>"
                     f"差值 {fmt(res['diff'])}，t={res['t']:.2f}，p={_fmt_p(res['p'])}，"
                     f"Cohen's d={res['cohens_d']:.2f} → "
                     + ("<b>差异显著</b>（p&lt;0.05，不太可能是抽样偶然）" if sig
                        else "<b>差异不显著</b>（p≥0.05，不能排除随机波动，别急着下结论）")
-                    + "</div>", unsafe_allow_html=True)
+                    + "</div>")
                 _summary.append(
                     f"「{a}」和「{b_val}」的{col}差异{'显著' if sig else '不显著'}（p={_fmt_p(res['p'])}，"
                     f"相差 {fmt(res['diff'])}）：{'说明这个差别是真的，值得追因' if sig else '还不足以排除随机波动，先别据此下结论'}。")
@@ -123,17 +122,15 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                 tb["t 值"] = tb["t 值"].map(lambda v: f"{v:,.2f}")
                 tb["p 值"] = tb["p 值"].map(_fmt_p)
                 st.dataframe(tb, width="stretch", hide_index=True)
-                st.markdown(
+                st.html(
                     f"<div class='insight'>R² = <b>{m['r2']:.3f}</b>（模型解释了 {m['r2']*100:.1f}% 的波动），"
                     f"调整 R² = {m['adj_r2']:.3f}，F = {m['f']:.2f}（p={_fmt_p(m['f_p'])}），样本 {m['n']:,} 行。<br>"
                     f"{'模型整体显著，可以看系数方向；' if np.isfinite(m['f_p']) and m['f_p'] < 0.05 else '模型整体不显著，这些变量解释力不够；'}"
-                    f"系数为正表示该变量越大 Y 越大。注意：这是相关关系，不是因果关系。</div>",
-                    unsafe_allow_html=True)
+                    f"系数为正表示该变量越大 Y 越大。注意：这是相关关系，不是因果关系。</div>")
                 with st.expander("这说明了什么？（每个系数的人话解释）", expanded=True):
                     for line in EX.coef_sentences(m, y_col):
-                        st.markdown(f"<div class='insight'>{line}</div>", unsafe_allow_html=True)
-                    st.markdown("<div class='sect' style='margin-top:14px'>模型结论</div>",
-                                unsafe_allow_html=True)
+                        st.html(f"<div class='insight'>{line}</div>")
+                    st.html("<div class='sect' style='margin-top:14px'>模型结论</div>")
                     for line in EX.model_readout(m, y_col):
                         st.caption("· " + line)
                 # 找影响最大的显著变量，写进综合结论
@@ -184,8 +181,8 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                     prof = EX.cluster_profiles(tmp, feats)
                 else:
                     prof = EX.cluster_profiles(tmp, feats)
-                st.markdown("<div class='sect' style='margin-top:12px'>每一群是什么"
-                            "<small>相对整体均值看，偏高还是偏低</small></div>", unsafe_allow_html=True)
+                st.html("<div class='sect' style='margin-top:12px'>每一群是什么"
+                            "<small>相对整体均值看，偏高还是偏低</small></div>")
                 st.dataframe(pd.DataFrame(prof), width="stretch", hide_index=True)
                 _summary.append(
                     f"数据自然分成 {km['k']} 群，差别最大的特征是「{feats[0]}」——"
@@ -210,7 +207,7 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                 if orders_cur and orders_prev and rev_prev:
                     aov_cur, aov_prev = rev_cur / orders_cur, rev_prev / orders_prev
                     d = SM.decompose(orders_prev, aov_prev, orders_cur, aov_cur, "订单数", "客单价")
-                    st.markdown(
+                    st.html(
                         f"<div class='insight'>收入 {fmt(d['prev'])} → {fmt(d['cur'])}，"
                         f"变化 <b>{d['delta']:+,.0f}</b>（{d['delta']/d['prev']*100:+.1f}%）<br>"
                         f"· 订单数 {orders_prev:,} → {orders_cur:,}（{orders_cur-orders_prev:+,}），"
@@ -219,7 +216,7 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
                         f"贡献 {d['eff_b']:+,.0f}（占 {d['share_b']*100:.0f}%）<br>"
                         f"· 两者交互 {d['interaction']:+,.0f}<br>"
                         f"→ {'主要由量带动' if abs(d['eff_a']) > abs(d['eff_b']) else '主要由价带动'}"
-                        f"，三项相加严格等于总收入变化。</div>", unsafe_allow_html=True)
+                        f"，三项相加严格等于总收入变化。</div>")
                     _summary.append(
                         f"{cur_m} 比 {prev_m} 的收入变化{'主要由订单量带动' if abs(d['eff_a']) > abs(d['eff_b']) else '主要由客单价带动'}——"
                         f"{'要增收得先把客流/订单做起来' if abs(d['eff_a']) > abs(d['eff_b']) else '靠提价或提高连带，而不是盲目冲量'}。")
@@ -245,19 +242,16 @@ def render_stats(df, metric, qty_c, cost_c, dc, big, detail, cust_col, oc):
 
     # ============ 综合结论（把上面所有建模结果串成一句话） ============
     if _summary:
-        st.markdown("<div class='sect' style='margin-top:20px'>综合结论"
-                    "<small>把上面的建模结果串起来，回答「到底该做什么」</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect' style='margin-top:20px'>综合结论"
+                    "<small>把上面的建模结果串起来，回答「到底该做什么」</small></div>")
         for _i, _s in enumerate(_summary, 1):
-            st.markdown(
+            st.html(
                 f"<div class='sumcard' style='border-left:4px solid #B85532;margin-bottom:8px'>"
-                f"<div style='font-size:13px;line-height:1.7'>{_i}. {_s}</div></div>",
-                unsafe_allow_html=True)
-        st.markdown(
+                f"<div style='font-size:13px;line-height:1.7'>{_i}. {_s}</div></div>")
+        st.html(
             "<div class='insight' style='border-left-color:#6F8A63'>"
             "<b>一句话</b>：上面的结论都来自当前这份数据、当前选的模型参数；"
-            "它们是「相关关系 + 显著性」的证据，不是因果，动手前先用对照实验或时间先后再验证一次。</div>",
-            unsafe_allow_html=True)
+            "它们是「相关关系 + 显著性」的证据，不是因果，动手前先用对照实验或时间先后再验证一次。</div>")
     else:
         st.info("当前数据或选择还没跑出可用的建模结果（样本不足 / 缺少字段），"
                 "所以没有综合结论。补足字段或换一份数据再试。")

@@ -2,7 +2,7 @@
 """数据与隐私：把「你的数据去了哪」讲清楚，而不是一句「放心」。"""
 import streamlit as st
 
-from style import MUTED, TEXT
+from style import MUTED
 
 _GUARANTEES = [
     ("不写磁盘", "上传的文件只在内存里解析，不生成任何数据文件；只有你点「下载」时才会生成文件给你自己"),
@@ -30,32 +30,30 @@ def where_am_i(host=None):
 
 def render(compact=False):
     mode = where_am_i()
-    st.markdown("<div class='sect'>数据与隐私<small>你的文件到底去了哪</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>数据与隐私<small>你的文件到底去了哪</small></div>")
 
     if mode == "local":
-        st.markdown(
+        st.html(
             "<div class='insight' style='border-left-color:#6F8A63'>"
             "<b>当前是本地运行</b>：数据只在你自己的电脑内存里，<b>没有离开过这台机器</b>，"
-            "关掉页面就释放。断网也能用。</div>", unsafe_allow_html=True)
+            "关掉页面就释放。断网也能用。</div>")
     elif mode == "cloud":
-        st.markdown(
+        st.html(
             "<div class='insight' style='border-left-color:#B9812F'>"
             "<b>当前是云端运行</b>（*.streamlit.app）：文件会通过 HTTPS 上传到 Streamlit 的服务器，"
             "在那台服务器的内存里完成计算，再把图表传回你的浏览器。<br>"
             "本应用不落盘、不外发、不调用外部 API，但<b>「数据没有离开服务器」这一点取决于托管平台</b>。"
-            "<br>→ 真实客户数据（手机号、会员卡号、身份证）建议用<b>本地版</b>，或先脱敏再上传。</div>",
-            unsafe_allow_html=True)
+            "<br>→ 真实客户数据（手机号、会员卡号、身份证）建议用<b>本地版</b>，或先脱敏再上传。</div>")
     else:
-        st.markdown(
+        st.html(
             "<div class='insight'>无法判断运行位置。判断依据：地址栏是 <b>localhost</b> 就是本地；"
-            "是 <b>*.streamlit.app</b> 就是云端。</div>", unsafe_allow_html=True)
+            "是 <b>*.streamlit.app</b> 就是云端。</div>")
 
     rows = ""
     for t, d in _GUARANTEES:
         rows += f"<tr><td style='white-space:nowrap'>✓ {t}</td><td class='note'>{d}</td></tr>"
-    st.markdown(f"<table class='mdict'><thead><tr><th>本应用的保证</th><th>具体含义</th></tr></thead>"
-                f"<tbody>{rows}</tbody></table>", unsafe_allow_html=True)
+    st.html(f"<table class='mdict'><thead><tr><th>本应用的保证</th><th>具体含义</th></tr></thead>"
+                f"<tbody>{rows}</tbody></table>")
 
     if not compact:
         st.caption("已关闭 Streamlit 使用统计（gatherUsageStats=false）。"
@@ -68,5 +66,5 @@ def badge():
     text, color = {"local": ("本地运行 · 数据不出机器", "#6F8A63"),
                    "cloud": ("云端运行 · 见「数据与口径」隐私说明", "#B9812F")}.get(
         mode, ("运行位置未知", MUTED))
-    st.markdown(f"<span style='display:inline-block;font-size:11.5px;color:#fff;background:{color};"
-                f"padding:3px 10px;border-radius:6px'>{text}</span>", unsafe_allow_html=True)
+    st.html(f"<div><span style='display:inline-block;font-size:11.5px;color:#fff;background:{color};"
+            f"padding:3px 10px;border-radius:6px'>{text}</span></div>")

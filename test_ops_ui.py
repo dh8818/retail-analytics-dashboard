@@ -7,7 +7,9 @@ from streamlit.testing.v1 import AppTest
 
 
 def blocks(at):
-    return [str(m.value) for m in at.markdown]
+    md = [str(m.value) for m in at.markdown]
+    html = [str(h.value) for h in getattr(at, "html", [])]
+    return md + html
 
 
 def check(label, state, must=(), forbid=()):

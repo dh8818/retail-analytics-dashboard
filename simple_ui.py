@@ -168,8 +168,7 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
             leaks.append((a.get("title", ""), a.get("evidence", "")))
 
     # ---- 页面 ----
-    st.markdown("<div class='sect'>这个月的经营情况<small>一屏看完，不用懂数据</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>这个月的经营情况<small>一屏看完，不用懂数据</small></div>")
 
     head_line = (
         f"这段时间卖了 <b>{_money(cur_rev)}</b>"
@@ -177,9 +176,9 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
         + (f"，主要少在「{drop_txt.split('「')[1].split('」')[0]}」" if (chg is not None and chg < 0 and "「" in drop_txt) else "")
         + "。"
     )
-    st.markdown(f"<div class='insight' style='font-size:15px;line-height:1.8'>{head_line}"
+    st.html(f"<div class='insight' style='font-size:15px;line-height:1.8'>{head_line}"
                 + (f"<br><span style='color:{MUTED};font-size:13px'>{drop_txt}</span>" if drop_txt else "")
-                + "</div>", unsafe_allow_html=True)
+                + "</div>")
 
     # 四个大数字：宽屏 4 列、手机 2 列（用 CSS 网格，不靠 Streamlit 的列）
     cards = [
@@ -189,7 +188,7 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
         ("每卖 100 块赚", _pct(margin) if margin is not None else "—", "毛利率"),
         ("平均每单", _money(aov), orders_note),
     ]
-    st.markdown(
+    st.html(
         "<style>.kpi4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 4px}"
         "@media (max-width:820px){.kpi4{grid-template-columns:repeat(2,1fr);gap:8px}}"
         "@media (max-width:360px){.kpi4{grid-template-columns:1fr}}"
@@ -200,15 +199,14 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
             f"<div class='kpi-value'>{val}</div>"
             f"<div class='kpi-sub'>{sub}</div></div>"
             for lab, val, sub in cards)
-        + "</div>", unsafe_allow_html=True)
+        + "</div>")
 
     # 每天卖多少：一张图看懂走势（轻量原生图，手机不卡）
     if metric in cur.columns:
         _d = cur.dropna(subset=[date_col])
         _daily = _d.groupby(_d[date_col].dt.date)[metric].sum()
         if len(_daily) >= 3:
-            st.markdown("<div class='sect'>这段时间每天卖多少<small>柱子高＝那天卖得多</small></div>",
-                        unsafe_allow_html=True)
+            st.html("<div class='sect'>这段时间每天卖多少<small>柱子高＝那天卖得多</small></div>")
             _ser = pd.Series(_daily.values, index=[str(d)[5:] for d in _daily.index],
                              name="每天销售额")   # 用 10-01 这种短标签，避免英文月份
             st.bar_chart(_ser, height=210, color="#C9744F")
@@ -220,38 +218,32 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
 
     left, right = st.columns([1, 1])
     with left:
-        st.markdown("<div class='sect'>钱从哪来<small>哪几个品类在撑这家店</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>钱从哪来<small>哪几个品类在撑这家店</small></div>")
         if cat_txt:
-            st.markdown(f"<div class='sumcard'><div style='font-size:20px;font-weight:600'>{cat_txt}</div>"
-                        f"<div style='color:{MUTED};font-size:12.5px;margin-top:6px'>{cat_more}</div></div>",
-                        unsafe_allow_html=True)
+            st.html(f"<div class='sumcard'><div style='font-size:20px;font-weight:600'>{cat_txt}</div>"
+                        f"<div style='color:{MUTED};font-size:12.5px;margin-top:6px'>{cat_more}</div></div>")
             if cat_more and "前 3" in cat_more:
                 st.caption("含义：生意不要只靠一个品类。前 3 个超过 70%，说明这家店很依赖少数几个品类。")
 
     with right:
-        st.markdown("<div class='sect'>哪里要注意<small>不用看全部数据，只看这三条</small></div>",
-                    unsafe_allow_html=True)
+        st.html("<div class='sect'>哪里要注意<small>不用看全部数据，只看这三条</small></div>")
         if leaks:
             for title, body in leaks[:3]:
-                st.markdown(
+                st.html(
                     f"<div class='sumcard' style='margin-bottom:8px'>"
                     f"<div style='font-weight:600;font-size:13px;color:#A84A42'>{title}</div>"
-                    f"<div style='font-size:12.5px;margin-top:4px'>{body}</div></div>",
-                    unsafe_allow_html=True)
+                    f"<div style='font-size:12.5px;margin-top:4px'>{body}</div></div>")
         else:
             st.success("这段时间没发现明显问题：没有大幅下滑的商品，也没有高优先级的异常。")
 
-    st.markdown("<div class='sect'>下一步做什么<small>照着做就行，每条都能算出好处</small></div>",
-                unsafe_allow_html=True)
+    st.html("<div class='sect'>下一步做什么<small>照着做就行，每条都能算出好处</small></div>")
     if advice_list:
         for i, a in enumerate(advice_list[:3], 1):
-            st.markdown(
+            st.html(
                 f"<div class='sumcard' style='margin-bottom:8px;border-left:3px solid {_LEVEL.get(a.get('sev'), '#888')}'>"
                 f"<div style='font-weight:600;font-size:13.5px'>{i}. {a['title']}</div>"
                 f"<div style='font-size:12.5px;margin-top:4px'><b>怎么做：</b>{a['action']}</div>"
-                f"<div style='font-size:12.5px;color:{MUTED};margin-top:2px'><b>能带来什么：</b>{a['impact']}</div></div>",
-                unsafe_allow_html=True)
+                f"<div style='font-size:12.5px;color:{MUTED};margin-top:2px'><b>能带来什么：</b>{a['impact']}</div></div>")
     else:
         st.info("数据量还太少，暂时给不出动作建议。至少导入一个月的明细。")
 
@@ -269,6 +261,6 @@ def render(df, metric, date_col, big_col, detail_col, qty_col, cost_col,
     with st.expander("看不懂的词，点这里"):
         rows = "".join(f"<tr><td style='white-space:nowrap'>{k}</td><td>{v}</td></tr>"
                        for k, v in TERMS.items())
-        st.markdown(f"<table class='mdict'><tbody>{rows}</tbody></table>", unsafe_allow_html=True)
+        st.html(f"<table class='mdict'><tbody>{rows}</tbody></table>")
 
     st.caption("这份快报用的是你上传的真实明细；要更细的分析（渠道、客户分层、预测），切到右上角「专业分析」。")
